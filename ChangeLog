@@ -1,0 +1,78 @@
+2011-09-17  Ron Dilley <ron.dilley@uberadmin.com>
+
+	* Initial public release.
+
+2011-09-23  Ron Dilley <ron.dilley@uberadmin.com>
+
+	* Added ability to ignore templates
+	* Added ability to save templates
+
+2011-11-12  Ron Dilley <ron.dilley@uberadmin.com>
+
+	* Added clustering
+	* Added option to ignore double quotes
+
+2012-01-17  Ron Dilley <ron.dilley@uberadmin.com>
+
+	* Added stdin option '-'
+	
+2013-12-28  Ron Dilley <ron.dilley@uberadmin.com>
+
+	* Added IPv4, HEX and IPv6 fields
+      
+2014-01-19  Ron Dilley <ron.dilley@uberadmin.com>
+
+	* Added ability to search for and display lines that match templates
+
+2018-12-29  Ron Dilley <ron.dilley@uberadmin.com>
+
+	* Added backend code to support log chains
+	* Fixed minor bugs
+
+2019-08-21  Ron Dilley <ron.dilley@uberadmin.com>
+
+	* Updated hash code and fixed off-by-one issue for hash keys
+
+2021-04-04  Ron Dilley <ron.dilley@uberadmin.com>
+
+	* Ported to FreeBSD 12.2
+
+2021-04-29  Ron Dilley <ron.dilley@uberadmin.com>
+
+	* Updated hash functions to use binary insert sort on matching keys
+	* Fixed minor bugs
+	
+2022-02-28  Ron Dilley <ron.dilley@uberadmin.com>
+
+	* Fixed some issues in the hash and cluster code to handle large lines/fields
+
+2022-03-08  Ron Dilley <ron.dilley@uberadmin.com>
+
+	* Fixed compile warnings when building on OS/X
+
+2022-03-14  Ron Dilley <ron.dilley@uberadmin.com>
+
+	* Minor documentation fixes
+	* Porting to various operating systems
+
+2023-06-08  Ron Dilley <ron.dilley@uberadmin.com>
+
+  * Updated autoconf files to address deprecated options
+
+2024-10-02  Ron Dilley <ron.dilley@uberadmin.com>
+
+	* Added support for Tom Liston PINEAPPLE mode
+
+2025-07-24  Ron Dilley <ron.dilley@uberadmin.com>
+
+	* Major performance optimization release (v1.0.5)
+	* Added fast character classification lookup table (char_class.c)
+	* Implemented pre-allocated parser fields to eliminate malloc overhead
+	* Enhanced memory safety with integer overflow protection
+	* Added comprehensive function documentation throughout codebase
+	* Replaced isalpha/isdigit/isalnum calls with fast FAST_IS* macros
+	* Improved hash table documentation with algorithm complexity notes
+	* Enhanced copy_argv() with bounds checking and overflow protection
+	* Performance improvement: 20-35% faster processing for large log files
+	* Security enhancement: prevents buffer overflow vulnerabilities
+

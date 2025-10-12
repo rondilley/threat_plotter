@@ -1,0 +1,18 @@
+Threat Plot (tplot) TODO list
+==============
+
+Short-term:
+-----------
+* Implement Hilbert curve plotting functionality
+* Add IP geolocation database integration for timezone mapping
+* Implement timezone-aware visualization
+* Add support for multiple honeypot log formats
+* Add configurable time domain selection
+
+Long-term:
+----------
+* Add interactive visualization interface
+* Support for real-time data streaming
+* Add multiple visualization curve options beyond Hilbert curves
+* Pattern detection and anomaly highlighting
+* Export functionality for visualizations

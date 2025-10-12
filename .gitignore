@@ -1,16 +1,8 @@
-# Prerequisites
-*.d
-
 # Object files
 *.o
 *.ko
 *.obj
 *.elf
-
-# Linker output
-*.ilk
-*.map
-*.exp
 
 # Precompiled Headers
 *.gch
@@ -38,18 +30,31 @@
 
 # Debug files
 *.dSYM/
-*.su
-*.idb
-*.pdb
 
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
+# Build artifacts
+/tplot
+tplot.1
+/config/
+/autom4te.cache/
+Makefile
+Makefile.in
+.deps/
+.libs/
+*.log
+*.trs
+test-driver
+stamp-h1
+config.h
+config.h.in
+config.status
+configure
+aclocal.m4
+compile
+depcomp
+install-sh
+missing
 
-# debug information files
-*.dwo
+# Static analysis results
+scan-build-results/
+cppcheck-results.xml
+splint-results.txt
