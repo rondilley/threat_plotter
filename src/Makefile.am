@@ -1,6 +1,6 @@
 bin_PROGRAMS = tplot
-tplot_SOURCES = main.c main.h tplot.c tplot.h parser.c parser.h match.c match.h mem.c mem.h util.c util.h hash.c hash.h bintree.c bintree.h char_class.c log_parser.c log_parser.h ../include/sysdep.h ../include/config.h ../include/common.h
-tplot_LDADD = -lz 
+tplot_SOURCES = main.c main.h tplot.c tplot.h mem.c mem.h util.c util.h hash.c hash.h char_class.c log_parser.c log_parser.h hilbert.c hilbert.h timebin.c timebin.h visualize.c visualize.h geoip.c geoip.h ../include/sysdep.h ../include/config.h ../include/common.h
+tplot_LDADD = -lz -lm -lmaxminddb 
 
 # Additional security-focused compiler flags
 AM_CFLAGS = -Wall -Wextra -Wstrict-prototypes -Wmissing-prototypes -Wold-style-definition

@@ -1,126 +1,261 @@
-.TH TPLOT 1  "12 October 2025" "tplot @VERSION@" "tplot @VERSION@"
+.TH TPLOT 1  "14 October 2025" "tplot @VERSION@" "tplot @VERSION@"
 .SH NAME
-tplot \- Threat plotter for honeypot and security log data visualization.
+tplot \- Threat plotter for honeypot and security log data visualization using Hilbert curves with timezone-aware CIDR mapping.
 .SH SYNOPSIS
 .na
 .B tplot
 [
-.B \-cghv
+.B \-dVv
 ] [
-.B \-d
-.I log\-level
+.B \-c
+.I codec
 ] [
-.B \-t
-.I filename
+.B \-C
+.I cidr\-map\-file
 ] [
-.B \-w
-.I filename
+.B \-f
+.I fps
+] [
+.B \-o
+.I output\-dir
+] [
+.B \-p
+.I period
 ]
-filename
+filename [filename ...]
 
 .SH DESCRIPTION
 .LP
-Threat Plot(\fltplot\fP) is a tool that processes log files from honeypots and other security sources and plots the data on Hilbert curves using a selectable time domain and format for the curve. The first version plots using the timezone of the source IP address.
+Threat Plot (\fBtplot\fP) is a visualization tool that processes log files from honeypots and other security sources and generates animated visualizations using Hilbert curve coordinate mapping. Source IP addresses are positioned based on their geographic timezone and CIDR allocation, revealing temporal attack patterns as they propagate across the globe.
+
+The tool processes honeypot sensor logs, extracting source IP addresses and timestamps, then maps them to coordinates on a Hilbert space-filling curve. The X-axis is organized by timezone (UTC-12 to UTC+14) with proportional width based on actual CIDR allocation density, while CIDR clustering keeps related network blocks visually proximate.
+
+Output consists of PPM frame images and an optional MP4 video showing the evolution of attack patterns over time, with configurable time binning and video generation parameters.
 
 .SH OPTIONS
 Command line options are described below.
 .TP 5
-.B \-c
-Display template output showing non-variable arguments.
+.B \-c, \-\-codec \fIcodec\fP
+Video codec to use for MP4 generation (default: libx264). Common options include libx264 (H.264), libx265 (H.265/HEVC), and libvpx-vp9 (VP9).
 .TP
-.B \-d
-Enable debug mode, the higher the \fllog\-level\fP, the more verbose the logging.
+.B \-C, \-\-cidr-map \fIfile\fP
+Path to CIDR mapping file containing pre-computed IP space allocation by timezone (default: cidr_map.txt). The file maps CIDR blocks to timezone offsets and X-axis coordinate ranges for proportional geographic visualization.
 .TP
-.B \-g
-Ignore double quotes and use greedy tokenization.
+.B \-d, \-\-debug \fIlevel\fP
+Enable debug mode with verbosity level 0-9. Higher values produce more detailed diagnostic output including event processing, Hilbert coordinate mapping, and frame rendering statistics.
 .TP
-.B \-h
-Display help details.
+.B \-f, \-\-fps \fIfps\fP
+Video framerate in frames per second (default: 3). Range: 1-120. Lower values (1-5) are suitable for time-lapse viewing where each frame represents minutes or hours. Higher values (30-60) produce smoother playback.
 .TP
-.B \-t
-Load templates from a file.  Matching templates will be ignored.
+.B \-h, \-\-help
+Display help information and exit.
 .TP
-.B \-v
-Show version information.
+.B \-o, \-\-output \fIdirectory\fP
+Output directory for frame images and video file (default: plots). Directory will be created if it doesn't exist. Security validation prevents path traversal and access to system directories.
 .TP
-.B \-w
-Save templates to a file.
+.B \-p, \-\-period \fIduration\fP
+Time bin period for event aggregation (default: 1m). Each time bin generates one output frame. Supported formats: 1m, 5m, 15m, 30m, 60m, 120s, 1h, 2h. Shorter periods provide finer temporal resolution but generate more frames. Longer periods reveal broader attack patterns.
+.TP
+.B \-v, \-\-version
+Display version information and exit.
+.TP
+.B \-V, \-\-no-video
+Disable video generation, keeping only individual frame images. Useful for custom post-processing or when ffmpeg is unavailable.
 .TP
 .B filename
-One or more files to process, us '\-' to read from stdin.
+One or more honeypot log files to process. Gzip-compressed files (.gz) are automatically detected and decompressed during streaming processing.
+
+.SH OUTPUT
+The tool generates two types of output:
+.TP
+.B Frame images
+PPM format images named \fIframe_YYYYMMDD_HHMMSS_NNNN.ppm\fP where the timestamp indicates the start of the time bin. Each frame is approximately 15MB at 3440x1440 resolution.
+.TP
+.B Video file
+MP4 video file named \fIoutput.mp4\fP containing all frames encoded with the specified codec and framerate. Generated automatically unless \-V is specified.
+
+.SH VISUALIZATION
+Each frame displays a heatmap of attack sources mapped to Hilbert curve coordinates:
+.TP
+.B X-axis
+Geographic timezone from UTC-12 (left) to UTC+14 (right). Width is proportional to CIDR allocation density: US timezones occupy ~30-37%, Europe (UTC+0) ~37%, Asia (UTC+8) ~10%.
+.TP
+.B Y-axis
+CIDR clustering provides vertical separation while keeping related network blocks proximate.
+.TP
+.B Color intensity
+Pixel brightness indicates the number of events from that source IP. Brighter areas represent more active attack sources.
+.TP
+.B Decay cache
+Recently active but currently inactive IPs fade gradually, showing temporal patterns and persistent threat actors.
+.TP
+.B Static positioning
+Each IP address maps to the same coordinate across all frames, enabling visual tracking of recurring sources.
 
 .SH EXAMPLES
 .TP
-Process file using the fast parse and template code.
-.B tplot
-.I file
+Process honeypot logs with default settings (1-minute bins):
+.B tplot logs/sensor.log.gz
 .PP
 .TP
-Process file using the clustering parse and template code.
-.B tplot
-\-c
-.I file
+Generate 5-minute time bins for broader pattern analysis:
+.B tplot -p 5m logs/sensor.log.gz
 .PP
 .TP
-Process file and save all unique templates to outfile.
-.B tplot
-\-w
-.I outfile
-.I file
+Process multiple log files with custom output directory:
+.B tplot -p 5m -o output logs/sensor1.log.gz logs/sensor2.log.gz
 .PP
 .TP
-Read templates from infile and process file, ignoring templates found in infile.
-.B tplot
-\-t
-.I infile
-.I file
+Generate frames only without video (for custom processing):
+.B tplot -p 5m -V -o frames logs/sensor.log.gz
 .PP
 .TP
-Read templates from infile and process file, ignorming templated found in infile and writing all templates from infile and new to outfile.
-.br
+High-framerate video with H.265 codec:
+.B tplot -p 1m -f 30 -c libx265 logs/sensor.log.gz
+.PP
+.TP
+Debug mode with custom CIDR mapping:
+.B tplot -d 2 -C custom_cidr_map.txt -p 5m logs/sensor.log.gz
+
+.SH LOG FORMAT
 .B tplot
-\-t
-.I infile
-\-w
-.I outfile
-.I file
+currently supports honeypot sensor logs in syslog format with the following characteristics:
+.TP
+- Contains \fIsensor:\fP identifier
+.TP
+- Timestamp format: \fIPacketTime:YYYY-MM-DD HH:MM:SS.microseconds\fP
+.TP
+- IP/port format: \fIsource_ip:port -> dest_ip:port\fP
+.TP
+- Protocol: IPv4/TCP or IPv4/UDP
+.TP
+- Optional BASE64 encoded packet data
+
+Example log entry:
+.nf
+Feb 22 09:26:39 10.10.10.40 honeypi00 sensor: PacketTime:2019-02-22 17:26:39.092449
+Len:60 IPv4/TCP 45.55.247.43:35398 -> 10.10.10.40:5900 ID:58486 TOS:0x0 TTL:51
+IpLen:20 DgLen:40 *A**** Seq:0x652f4680 Ack:0xfbb1f77f Win:0xfaef TcpLen:20
+.fi
+
+.SH PERFORMANCE
+Tested on 7.4M line log file (631MB compressed, 3.4GB uncompressed):
+.TP
+.B Processing time
+58.8 seconds
+.TP
+.B Throughput
+125,488 lines/second (58.4 MB/second)
+.TP
+.B Events processed
+5,482,175 honeypot events (74.3% success rate)
+.TP
+.B Frames generated
+577 frames (5-minute bins)
+.TP
+.B Memory usage
+Low footprint via streaming architecture
+
+.SH DEPENDENCIES
+.B tplot
+requires the following runtime dependencies:
+.TP
+.B zlib
+For gzip-compressed log file decompression
+.TP
+.B libmaxminddb
+For GeoIP timezone lookups using MaxMind GeoLite2 database
+.TP
+.B ffmpeg
+For video generation (optional, only needed if \-V not specified)
+.TP
+.B GeoLite2-City.mmdb
+MaxMind GeoIP database file (place in working directory)
+.TP
+.B cidr_map.txt
+Pre-computed CIDR to timezone mapping file (included)
+
+.SH FILES
+.TP
+.B GeoLite2-City.mmdb
+MaxMind GeoIP database for IP geolocation and timezone detection
+.TP
+.B cidr_map.txt
+CIDR allocation mapping with proportional timezone bands
+.TP
+.B plots/frame_*.ppm
+Generated frame images (PPM format)
+.TP
+.B plots/output.mp4
+Generated video file (MP4/H.264)
 
 .SH DIAGNOSTICS
-.B \fltplot\fP
-returns 0 on normal program termination and 1 on error.  Additional diagnostic information is available through the \-d command line switch.
+.B tplot
+returns 0 on successful completion and 1 on error. Diagnostic output levels:
+.TP
+.B -d 1
+Basic progress and statistics
+.TP
+.B -d 2
+Event processing details and coordinate mapping
+.TP
+.B -d 3+
+Verbose debugging including individual event processing
 
-.SH SIGNALS
+Common error messages:
 .TP
-SIGHUP will cause \fltplot\fP to quit gracefully.
+"ERR - Failed to load CIDR mapping"
+CIDR mapping file not found or invalid format. Falls back to hash-based distribution.
 .TP
-SIGTERM will cause \fltplot\fP to shutdown.
+"ERR - Cannot open GeoIP database"
+GeoLite2-City.mmdb not found or invalid. GeoIP features unavailable.
+.TP
+"WARN - No CIDR mapping found"
+Using fallback hash-based IP distribution instead of timezone-aware mapping.
+
+.SH SECURITY
+.B tplot
+is a defensive security tool for analyzing attack patterns. Security considerations:
+.TP
+- Path traversal protection prevents access to system directories
+.TP
+- Symlink attack prevention via O_NOFOLLOW
+.TP
+- Input validation on all command-line parameters
+.TP
+- Read-only operations on log files
+.TP
+- No arbitrary code execution capabilities
+
+\fBWarning:\fP As with any log processing tool, untrusted log files could potentially exploit vulnerabilities in the parser. Process logs only from trusted sources.
 
 .SH COPYRIGHT
 .B tplot
-is Copyright (c) 2025 Ron Dilley.
+is Copyright (c) 2008-2025 Ron Dilley.
 
-This program is free software; you can redistribute it and/or modify 
-it under the terms of the GNU General Public License as published 
-by the Free Software Foundation; either version 2 of the License, 
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published
+by the Free Software Foundation; either version 3 of the License,
 or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful, 
-but WITHOUT ANY WARRANTY; without even the implied warranty of 
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the 
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License 
-along with this program; if not, write to the Free Software 
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, 
-MA 02111-1307 USA.
+You should have received a copy of the GNU General Public License
+along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 .SH BUGS
-Please send problems, bugs, questions, desirable enhancements, etc. to:
-tplot-workers@uberadmin.com
+Please report problems, bugs, questions, and enhancement requests to:
+.br
+ron.dilley@uberadmin.com
 
-Please send source code contributions, etc. to:
-tplot-patches@uberadmin.com
+.SH SEE ALSO
+.BR ffmpeg (1),
+.BR zcat (1)
 
-There are no documented bugs at this time.
+Online documentation: http://www.uberadmin.com/Projects/tplot/
+
 .SH AUTHORS
-Ron Dilley e-mail: ron.dilley@uberadmin.com
+Ron Dilley <ron.dilley@uberadmin.com>

@@ -135,6 +135,18 @@ typedef struct {
   time_t current_time;
   pid_t cur_pid;
   FILE *outFile_st;
+
+  /* Visualization options */
+  uint32_t time_bin_seconds;   /* Time bin duration in seconds (default: 60) */
+  const char *output_dir;      /* Output directory for visualization frames */
+  uint32_t viz_width;          /* Visualization width in pixels */
+  uint32_t viz_height;         /* Visualization height in pixels */
+  int generate_video;          /* Generate video from frames (default: 1) */
+  uint32_t video_fps;          /* Video framerate (default: 3, auto-scaled) */
+  const char *video_codec;     /* Video codec (default: libx264) */
+  const char *cidr_map_file;   /* Path to CIDR mapping file (default: cidr_map.txt) */
+  uint32_t target_video_duration; /* Target video length in seconds (default: 300 = 5 min) */
+  int auto_scale;              /* Auto-scale FPS and decay based on data span (default: 1) */
 } Config_t;
 
 #endif	/* end of COMMON_H */

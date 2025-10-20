@@ -53,7 +53,7 @@
 #include "util.h"
 #include "mem.h"
 #include "tplot.h"
-#include "match.h"
+#include <libgen.h>  /* For dirname() */
 
 /****
  *
@@ -77,7 +77,9 @@ int main(int argc, char *argv[]);
 PRIVATE void print_version( void );
 PRIVATE void print_help( void );
 PRIVATE void cleanup( void );
+#ifdef DEBUG
 PRIVATE void show_info( void );
+#endif
 void ctime_prog( int signo );
 
 #endif /* MAIN_DOT_H */

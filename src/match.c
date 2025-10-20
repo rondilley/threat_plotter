@@ -50,57 +50,7 @@ struct templateMatchList_s *matchTemplates = NULL;
 
 extern Config_t *config;
 
-/****
- * secure file open with symlink protection
- ****/
-PRIVATE FILE *secure_fopen(const char *path, const char *mode)
-{
-  int flags = 0;
-  int fd;
-  FILE *fp;
-  
-  if (!path || !mode) {
-    return NULL;
-  }
-  
-  /* Determine flags based on mode */
-  if (strchr(mode, 'r') && !strchr(mode, '+')) {
-    flags = O_RDONLY | O_NOFOLLOW;
-  } else if (strchr(mode, 'w')) {
-    flags = O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW;
-  } else if (strchr(mode, 'a')) {
-    flags = O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW;
-  } else if (strchr(mode, '+')) {
-    if (strchr(mode, 'r')) {
-      flags = O_RDWR | O_NOFOLLOW;
-    } else if (strchr(mode, 'w')) {
-      flags = O_RDWR | O_CREAT | O_TRUNC | O_NOFOLLOW;
-    } else if (strchr(mode, 'a')) {
-      flags = O_RDWR | O_CREAT | O_APPEND | O_NOFOLLOW;
-    }
-  } else {
-    fprintf(stderr, "ERR - Invalid file mode: %s\n", mode);
-    return NULL;
-  }
-  
-  /* Open file with O_NOFOLLOW to prevent symlink attacks */
-  fd = open(path, flags, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-  if (fd == -1) {
-    if (errno == ELOOP) {
-      fprintf(stderr, "ERR - Symbolic link detected, access denied: %s\n", path);
-    }
-    return NULL;
-  }
-  
-  /* Convert file descriptor to FILE* */
-  fp = fdopen(fd, mode);
-  if (fp == NULL) {
-    close(fd);
-    return NULL;
-  }
-  
-  return fp;
-}
+/* secure_fopen() is now in util.c */
 
 /****
  * 
@@ -116,7 +66,7 @@ PRIVATE FILE *secure_fopen(const char *path, const char *mode)
 
 int addMatchTemplate(char *template)
 {
-  int templateLen = strlen(template);
+  int templateLen = (int)strlen(template);
   struct templateMatchList_s *head = matchTemplates;
   struct templateMatchList_s *tmpMatch = XMALLOC(sizeof(struct templateMatchList_s));
 
@@ -174,10 +124,10 @@ int loadMatchTemplates(char *fName)
     if (inBuf[0] != '#')
     {
       /* strip of <CR> or <LF> */
-      lLen = strlen(inBuf);
+      lLen = (int)strlen(inBuf);
       for (i = 0; i < lLen; i++)
       {
-        if (inBuf[i] EQ '\n' | inBuf[i] EQ '\r')
+        if ((inBuf[i] EQ '\n') || (inBuf[i] EQ '\r'))
         {
           inBuf[i] = '\0';
           i = lLen;
@@ -267,7 +217,7 @@ int loadMatchLines(char *fName)
     if (inBuf[0] != '#')
     {
       /* strip of <CR> */
-      lLen = strlen(inBuf);
+      lLen = (int)strlen(inBuf);
       for (i = 0; i < lLen; i++)
       {
         if (inBuf[i] EQ '\n')

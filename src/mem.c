@@ -130,13 +130,14 @@ PUBLIC char *copy_argv(char *argv[])
   }
   total_length++; /* add room for a null */
 
-  buf = (char *)XMALLOC(sizeof(char) * total_length);
+  buf = (char *)XMALLOC((int)(sizeof(char) * total_length));
 
   *buf = 0;
   for (arg = argv; *arg != NULL; arg++)
   {
     size_t current_len = strlen(buf);
     size_t remaining = total_length - current_len - 1;
+    (void)remaining;  /* Suppress unused warning - used in non-HAVE_STRLCAT path */
 #ifdef HAVE_STRLCAT
     strlcat(buf, *arg, total_length);
     strlcat(buf, " ", total_length);
@@ -191,7 +192,7 @@ void *xmalloc_(const int size, const char *filename, const int linenumber)
 #endif
 
   /* allocate buf */
-  result = malloc(size);
+  result = malloc((size_t)size);
   if (result EQ NULL)
   {
 #ifdef PINEAPPLE
@@ -241,7 +242,7 @@ void *xmalloc_(const int size, const char *filename, const int linenumber)
   d_result->buf_size = size;
 #endif
 
-  bzero(result, size);
+  bzero(result, (size_t)size);
 
 #ifdef MEM_DEBUG
   d_result->status = MEM_D_STAT_CLEAN;
@@ -256,7 +257,7 @@ void *xmalloc_(const int size, const char *filename, const int linenumber)
  *
  ****/
 
-void *xmemcpy_(void *d_ptr, void *s_ptr, const int size, const char *filename,
+void *xmemcpy_(void *d_ptr, const void *s_ptr, const int size, const char *filename,
                const int linenumber)
 {
   void *result;
@@ -352,28 +353,28 @@ void *xmemcpy_(void *d_ptr, void *s_ptr, const int size, const char *filename,
 
   if (s_ptr < d_ptr)
   {
-    if (s_ptr + size >= d_ptr)
+    if ((const char *)s_ptr + size >= (char *)d_ptr)
     {
       /* overlap, use memmove */
-      result = memmove(d_ptr, s_ptr, size);
+      result = memmove(d_ptr, s_ptr, (size_t)size);
     }
     else
     {
       /* no overlap, use memcpy */
-      result = memcpy(d_ptr, s_ptr, size);
+      result = memcpy(d_ptr, s_ptr, (size_t)size);
     }
   }
   else if (s_ptr > d_ptr)
   {
-    if (d_ptr + size >= s_ptr)
+    if ((char *)d_ptr + size >= (const char *)s_ptr)
     {
       /* overlap, use memmove */
-      result = memmove(d_ptr, s_ptr, size);
+      result = memmove(d_ptr, s_ptr, (size_t)size);
     }
     else
     {
       /* no overlap, use memcpy */
-      result = memcpy(d_ptr, s_ptr, size);
+      result = memcpy(d_ptr, s_ptr, (size_t)size);
     }
   }
   else
@@ -399,7 +400,7 @@ void *xmemcpy_(void *d_ptr, void *s_ptr, const int size, const char *filename,
  *
  ****/
 
-char *xmemncpy_(char *d_ptr, const char *s_ptr, const size_t len,
+char *xmemncpy_(char *d_ptr, const char *s_ptr, const size_t len __attribute__((unused)),
                 const int size, const char *filename, const int linenumber)
 {
   char *result;
@@ -494,28 +495,28 @@ char *xmemncpy_(char *d_ptr, const char *s_ptr, const size_t len,
 
   if (s_ptr < d_ptr)
   {
-    if (s_ptr + size >= d_ptr)
+    if ((const char *)s_ptr + size >= (char *)d_ptr)
     {
       /* overlap, use memmove */
-      result = memmove(d_ptr, s_ptr, size);
+      result = memmove(d_ptr, s_ptr, (size_t)size);
     }
     else
     {
       /* no overlap, use memcpy */
-      result = memcpy(d_ptr, s_ptr, size);
+      result = memcpy(d_ptr, s_ptr, (size_t)size);
     }
   }
   else if (s_ptr > d_ptr)
   {
-    if (d_ptr + size >= s_ptr)
+    if ((char *)d_ptr + size >= (const char *)s_ptr)
     {
       /* overlap, use memmove */
-      result = memmove(d_ptr, s_ptr, size);
+      result = memmove(d_ptr, s_ptr, (size_t)size);
     }
     else
     {
       /* no overlap, use memcpy */
-      result = memcpy(d_ptr, s_ptr, size);
+      result = memcpy(d_ptr, s_ptr, (size_t)size);
     }
   }
   else
@@ -543,7 +544,8 @@ char *xmemncpy_(char *d_ptr, const char *s_ptr, const size_t len,
  ****/
 
 void *xmemset_(void *ptr, const char value, const int size,
-               const char *filename, const int linenumber)
+               const char *filename __attribute__((unused)),
+               const int linenumber __attribute__((unused)))
 {
   void *result;
 
@@ -557,12 +559,12 @@ void *xmemset_(void *ptr, const char value, const int size,
 
   if (value EQ 0)
   {
-    bzero(ptr, size);
+    bzero(ptr, (size_t)size);
     result = ptr;
   }
   else
   {
-    result = memset(ptr, value, size);
+    result = memset(ptr, value, (size_t)size);
   }
 
 #ifdef MEM_DEBUG
@@ -578,8 +580,9 @@ void *xmemset_(void *ptr, const char value, const int size,
  *
  ****/
 
-int xmemcmp_(const void *s1, const void *s2, size_t n, const char *filename,
-             const int linenumber)
+int xmemcmp_(const void *s1, const void *s2, size_t n,
+             const char *filename __attribute__((unused)),
+             const int linenumber __attribute__((unused)))
 {
   int result;
 
@@ -618,9 +621,9 @@ void *xrealloc_(void *ptr, int size, const char *filename, const int linenumber)
 #endif
 
   if (ptr EQ NULL)
-    result = malloc(size);
+    result = malloc((size_t)size);
   else
-    result = realloc(ptr, size);
+    result = realloc(ptr, (size_t)size);
 
 #ifdef MEM_DEBUG
   fprintf(stderr, "%p realloc %s:%d (%d bytes)\n", result, filename, linenumber, size);
@@ -719,10 +722,13 @@ void *xrealloc_(void *ptr, int size, const char *filename, const int linenumber)
 
 void xfree_(void *ptr, const char *filename, const int linenumber)
 {
-#ifdef MEM_DEBUG
+#if defined(MEM_DEBUG) || defined(SHOW_MEM_DEBUG)
   PRIVATE struct Mem_s *d_ptr;
   PRIVATE int found = FALSE;
   PRIVATE int size = 0;
+#else
+  (void)filename;  /* Suppress unused warning */
+  (void)linenumber;
 #endif
 
   if (ptr EQ NULL)
@@ -829,7 +835,8 @@ void xfree_all_(const char *filename, const int linenumber)
  *
  ****/
 
-char *xstrdup_(const char *str, const char *filename, const int linenumber)
+char *xstrdup_(const char *str, const char *filename __attribute__((unused)),
+               const int linenumber __attribute__((unused)))
 {
   char *res;
 
@@ -848,7 +855,9 @@ char *xstrdup_(const char *str, const char *filename, const int linenumber)
  *
  ****/
 
-void xgrow_(void **old, int elementSize, int *oldCount, int newCount, char *filename, const int linenumber)
+void xgrow_(void **old, int elementSize, int *oldCount, int newCount,
+            char *filename __attribute__((unused)),
+            const int linenumber __attribute__((unused)))
 {
   void *tmp;
   int size;
@@ -858,7 +867,7 @@ void xgrow_(void **old, int elementSize, int *oldCount, int newCount, char *file
     tmp = NULL;
   else
   {
-    tmp = malloc(size);
+    tmp = malloc((size_t)size);
 
 #ifdef MEM_DEBUG
     fprintf(stderr, "%p malloc %s:%d (grow)\n", tmp, filename, linenumber);
@@ -870,10 +879,10 @@ void xgrow_(void **old, int elementSize, int *oldCount, int newCount, char *file
       quit = TRUE;
       exit(1);
     }
-    memset(tmp, 0, size);
+    memset(tmp, 0, (size_t)size);
     if (*oldCount > newCount)
       *oldCount = newCount;
-    memcpy(tmp, *old, elementSize * (*oldCount));
+    memcpy(tmp, *old, (size_t)(elementSize * (*oldCount)));
   }
 
   if (*old != NULL)
@@ -922,7 +931,7 @@ char *xstrcpy_(char *d_ptr, const char *s_ptr, const char *filename, const int l
     exit(1);
   }
 
-  if ((size = (strlen(s_ptr) + 1)) EQ 0)
+  if ((size = (int)(strlen(s_ptr) + 1)) EQ 0)
   {
 #ifdef SHOW_MEM_DEBUG
     fprintf(stderr, "strcpy called with zero length source pointer at %s:%d\n",
@@ -998,28 +1007,28 @@ char *xstrcpy_(char *d_ptr, const char *s_ptr, const char *filename, const int l
 
   if (s_ptr < d_ptr)
   {
-    if (s_ptr + size >= d_ptr)
+    if ((const char *)s_ptr + size >= (char *)d_ptr)
     {
       /* overlap, use memmove */
-      result = memmove(d_ptr, s_ptr, size);
+      result = memmove(d_ptr, s_ptr, (size_t)size);
     }
     else
     {
       /* no overlap, use memcpy */
-      result = memcpy(d_ptr, s_ptr, size);
+      result = memcpy(d_ptr, s_ptr, (size_t)size);
     }
   }
   else if (s_ptr > d_ptr)
   {
-    if (d_ptr + size >= s_ptr)
+    if ((char *)d_ptr + size >= (const char *)s_ptr)
     {
       /* overlap, use memmove */
-      result = memmove(d_ptr, s_ptr, size);
+      result = memmove(d_ptr, s_ptr, (size_t)size);
     }
     else
     {
       /* no overlap, use memcpy */
-      result = memcpy(d_ptr, s_ptr, size);
+      result = memcpy(d_ptr, s_ptr, (size_t)size);
     }
   }
   else
@@ -1048,8 +1057,8 @@ char *xstrcpy_(char *d_ptr, const char *s_ptr, const char *filename, const int l
 
 char *xstrncpy_(char *d_ptr, const char *s_ptr, const size_t len, const char *filename, const int linenumber)
 {
-  char *result;
-  PRIVATE int size;
+  char *result = NULL;  /* Initialize to suppress warning */
+  PRIVATE size_t size;
 #ifdef MEM_DEBUG
   PRIVATE struct Mem_s *mem_ptr;
   PRIVATE int source_size;
@@ -1087,7 +1096,7 @@ char *xstrncpy_(char *d_ptr, const char *s_ptr, const size_t len, const char *fi
   }
 
   /* check size of source string */
-  if ((size = (strnlen(s_ptr,len-1) + 1)) EQ 0)
+  if ((size = (strnlen(s_ptr, len - 1) + 1)) EQ 0)
   {
 #ifdef SHOW_MEM_DEBUG
     fprintf(stderr, "strncpy called with zero length source pointer at %s:%d\n", filename, linenumber);
@@ -1169,7 +1178,9 @@ char *xstrncpy_(char *d_ptr, const char *s_ptr, const size_t len, const char *fi
 #endif
 
   if (s_ptr != d_ptr)
-    strncpy( d_ptr, s_ptr, len );
+  {
+    result = strncpy(d_ptr, s_ptr, len);
+  }
   else
   {
     /* source and dest are the same, freak out */
@@ -1182,7 +1193,7 @@ char *xstrncpy_(char *d_ptr, const char *s_ptr, const size_t len, const char *fi
   }
 
 #ifdef SHOW_MEM_DEBUG
-  fprintf(stderr, "%p strncpy() called from %s:%d (%d bytes)\n",
+  fprintf(stderr, "%p strncpy() called from %s:%d (%lu bytes)\n",
           result, filename, linenumber, size);
 #endif
 

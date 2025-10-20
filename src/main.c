@@ -27,6 +27,7 @@
  ****/
 
 #include "main.h"
+#include "timebin.h"
 
 /****
  *
@@ -40,8 +41,9 @@
  *
  ****/
 
-PUBLIC int quit = FALSE;
-PUBLIC int reload = FALSE;
+/* Signal handler variables - must be volatile sig_atomic_t for safety */
+PUBLIC volatile sig_atomic_t quit = 0;
+PUBLIC volatile sig_atomic_t reload = 0;
 PUBLIC Config_t *config = NULL;
 
 /****
@@ -50,8 +52,7 @@ PUBLIC Config_t *config = NULL;
  *
  ****/
 
-extern int errno;
-extern char **environ;
+/* errno and environ are provided by standard headers */
 
 /****
  * secure integer parsing with validation
@@ -89,88 +90,74 @@ PRIVATE int safe_parse_int(const char *str, int min_val, int max_val, int *resul
 
 /****
  * validate file path for security
+ * SECURITY: Uses realpath() to resolve symlinks and relative paths
  ****/
 PRIVATE int validate_file_path(const char *path)
 {
+  char resolved[PATH_MAX];
+  char *resolved_ptr = NULL;
+  char *parent_dir = NULL;
+  char *path_copy = NULL;
+  int result = FALSE;
+
   if (!path) {
     return FALSE;
   }
-  
-  /* Check for path traversal attacks */
-  if (strstr(path, "../") || strstr(path, "..\\")) {
-    fprintf(stderr, "ERR - Path traversal detected in: %s\n", path);
-    return FALSE;
-  }
-  
-  /* Check for absolute paths to sensitive directories */
-  if (strncmp(path, "/etc/", 5) == 0 ||
-      strncmp(path, "/proc/", 6) == 0 ||
-      strncmp(path, "/sys/", 5) == 0 ||
-      strncmp(path, "/dev/", 5) == 0) {
-    fprintf(stderr, "ERR - Access to system directory denied: %s\n", path);
-    return FALSE;
-  }
-  
+
   /* Check path length */
   if (strlen(path) >= PATH_MAX) {
     fprintf(stderr, "ERR - Path too long: %s\n", path);
     return FALSE;
   }
-  
-  return TRUE;
+
+  /* Attempt to resolve the full path */
+  resolved_ptr = realpath(path, resolved);
+
+  if (resolved_ptr == NULL) {
+    /* Path doesn't exist yet - validate parent directory */
+    if (errno == ENOENT) {
+      /* Copy path for dirname() which may modify it */
+      path_copy = strdup(path);
+      if (!path_copy) {
+        fprintf(stderr, "ERR - Memory allocation failed\n");
+        return FALSE;
+      }
+
+      /* Get parent directory */
+      parent_dir = dirname(path_copy);
+
+      /* Try to resolve parent */
+      resolved_ptr = realpath(parent_dir, resolved);
+      free(path_copy);
+
+      if (resolved_ptr == NULL) {
+        fprintf(stderr, "ERR - Cannot resolve parent directory: %s\n", parent_dir);
+        return FALSE;
+      }
+    } else {
+      /* Other error - cannot validate */
+      fprintf(stderr, "ERR - Cannot resolve path: %s (%s)\n", path, strerror(errno));
+      return FALSE;
+    }
+  }
+
+  /* Check resolved path against blacklist */
+  if (strncmp(resolved, "/etc/", 5) == 0 ||
+      strncmp(resolved, "/proc/", 6) == 0 ||
+      strncmp(resolved, "/sys/", 5) == 0 ||
+      strncmp(resolved, "/dev/", 5) == 0 ||
+      strncmp(resolved, "/boot/", 6) == 0 ||
+      strncmp(resolved, "/root/", 6) == 0) {
+    fprintf(stderr, "ERR - Access to system directory denied: %s -> %s\n", path, resolved);
+    result = FALSE;
+  } else {
+    result = TRUE;
+  }
+
+  return result;
 }
 
-/****
- * secure file open with symlink protection
- ****/
-PRIVATE FILE *secure_fopen(const char *path, const char *mode)
-{
-  int flags = 0;
-  int fd;
-  FILE *fp;
-  
-  if (!path || !mode) {
-    return NULL;
-  }
-  
-  /* Determine flags based on mode */
-  if (strchr(mode, 'r') && !strchr(mode, '+')) {
-    flags = O_RDONLY | O_NOFOLLOW;
-  } else if (strchr(mode, 'w')) {
-    flags = O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW;
-  } else if (strchr(mode, 'a')) {
-    flags = O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW;
-  } else if (strchr(mode, '+')) {
-    if (strchr(mode, 'r')) {
-      flags = O_RDWR | O_NOFOLLOW;
-    } else if (strchr(mode, 'w')) {
-      flags = O_RDWR | O_CREAT | O_TRUNC | O_NOFOLLOW;
-    } else if (strchr(mode, 'a')) {
-      flags = O_RDWR | O_CREAT | O_APPEND | O_NOFOLLOW;
-    }
-  } else {
-    fprintf(stderr, "ERR - Invalid file mode: %s\n", mode);
-    return NULL;
-  }
-  
-  /* Open file with O_NOFOLLOW to prevent symlink attacks */
-  fd = open(path, flags, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-  if (fd == -1) {
-    if (errno == ELOOP) {
-      fprintf(stderr, "ERR - Symbolic link detected, access denied: %s\n", path);
-    }
-    return NULL;
-  }
-  
-  /* Convert file descriptor to FILE* */
-  fp = fdopen(fd, mode);
-  if (fp == NULL) {
-    close(fd);
-    return NULL;
-  }
-  
-  return fp;
-}
+/* secure_fopen() is now in util.c */
 
 /****
  *
@@ -180,10 +167,7 @@ PRIVATE FILE *secure_fopen(const char *path, const char *mode)
 
 int main(int argc, char *argv[])
 {
-  FILE *inFile = NULL, *outFile = NULL;
-  char inBuf[8192];
-  char outFileName[PATH_MAX];
-  PRIVATE int c = 0, i, ret;
+  PRIVATE int c = 0;
 
 #ifndef DEBUG
   struct rlimit rlim;
@@ -206,28 +190,37 @@ int main(int argc, char *argv[])
   config->gid = getgid();
   config->uid = getuid();
 
+  /* set visualization defaults */
+  config->time_bin_seconds = 60;  /* 1 minute default */
+  config->output_dir = NULL;
+  config->viz_width = 3440;       /* UWQHD 21:9 default */
+  config->viz_height = 1440;
+  config->generate_video = 1;     /* Generate video by default */
+  config->video_fps = 3;          /* 3 FPS default (auto-scaled based on data span) */
+  config->video_codec = "libx264"; /* H.264 codec default */
+  config->cidr_map_file = NULL;   /* Will try default location */
+  config->target_video_duration = 300;  /* 5 minutes default */
+  config->auto_scale = 1;         /* Auto-scale FPS and decay by default */
+
   while (1)
   {
-    int this_option_optind = optind ? optind : 1;
 #ifdef HAVE_GETOPT_LONG
     int option_index = 0;
     static struct option long_options[] = {
-        {"cluster", no_argument, 0, 'c'},
-        {"greedy", no_argument, 0, 'g'},
         {"version", no_argument, 0, 'v'},
         {"debug", required_argument, 0, 'd'},
         {"help", no_argument, 0, 'h'},
-        {"cnum", required_argument, 0, 'n'},
-        {"templates", required_argument, 0, 't'},
-        {"write", required_argument, 0, 'w'},
-        {"match", required_argument, 0, 'm'},
-        {"matchfile", required_argument, 0, 'M'},
-        {"line", required_argument, 0, 'l'},
-        {"linefile", required_argument, 0, 'L'},
+        {"period", required_argument, 0, 'p'},
+        {"output", required_argument, 0, 'o'},
+        {"no-video", no_argument, 0, 'V'},
+        {"fps", required_argument, 0, 'f'},
+        {"codec", required_argument, 0, 'c'},
+        {"cidr-map", required_argument, 0, 'C'},
+        {"duration", required_argument, 0, 'D'},
         {0, no_argument, 0, 0}};
-    c = getopt_long(argc, argv, "vd:hn:t:w:cCgm:M:l:L:", long_options, &option_index);
+    c = getopt_long(argc, argv, "vd:hp:o:Vf:c:C:D:", long_options, &option_index);
 #else
-    c = getopt(argc, argv, "vd:htn::w:cgm:M:l:L:");
+    c = getopt(argc, argv, "vd:hp:o:Vf:c:C:D:");
 #endif
 
     if (c EQ - 1)
@@ -241,40 +234,10 @@ int main(int argc, char *argv[])
       print_version();
       return (EXIT_SUCCESS);
 
-    case 'c':
-      /* enable argument clustering */
-      config->cluster = TRUE;
-      break;
-
     case 'd':
       /* show debug info */
       if (!safe_parse_int(optarg, 0, 9, &config->debug)) {
         fprintf(stderr, "ERR - Invalid debug level: %s (must be 0-9)\n", optarg);
-        return (EXIT_FAILURE);
-      }
-      break;
-
-    case 'g':
-      /* ignore quotes */
-      config->greedy = TRUE;
-      break;
-
-    case 'n':
-      /* override default cluster count */
-      if (!safe_parse_int(optarg, 1, 10000, &config->clusterDepth)) {
-        fprintf(stderr, "ERR - Invalid cluster depth: %s (must be 1-10000)\n", optarg);
-        return (EXIT_FAILURE);
-      }
-      break;
-
-    case 't':
-      /* load template file */
-      if (!validate_file_path(optarg)) {
-        return (EXIT_FAILURE);
-      }
-      if (loadTemplateFile(optarg) != TRUE)
-      {
-        fprintf(stderr, "ERR - Problem while loading template file\n");
         return (EXIT_FAILURE);
       }
       break;
@@ -284,42 +247,56 @@ int main(int argc, char *argv[])
       print_help();
       return (EXIT_SUCCESS);
 
-    case 'w':
-      /* save templates to file */
+    case 'p':
+      /* set time bin period */
+      if (!parseTimeBinDuration(optarg, &config->time_bin_seconds)) {
+        fprintf(stderr, "ERR - Invalid time period: %s (use format: 1m, 5m, 60m, etc.)\n", optarg);
+        return (EXIT_FAILURE);
+      }
+      break;
+
+    case 'o':
+      /* set output directory */
       if (!validate_file_path(optarg)) {
+        fprintf(stderr, "ERR - Invalid output directory: %s\n", optarg);
         return (EXIT_FAILURE);
       }
-      if ((config->outFile_st = secure_fopen(optarg, "w")) EQ NULL)
-      {
-        fprintf(stderr, "ERR - Unable to open template file for write [%s]\n", optarg);
+      config->output_dir = optarg;
+      break;
+
+    case 'V':
+      /* disable video generation */
+      config->generate_video = 0;
+      break;
+
+    case 'f':
+      /* set video framerate */
+      if (!safe_parse_int(optarg, 1, 120, (int *)&config->video_fps)) {
+        fprintf(stderr, "ERR - Invalid framerate: %s (must be 1-120)\n", optarg);
         return (EXIT_FAILURE);
       }
       break;
 
-    case 'M':
-      /* load match templates from file */
+    case 'c':
+      /* set video codec */
+      config->video_codec = optarg;
+      break;
+
+    case 'C':
+      /* set CIDR mapping file */
       if (!validate_file_path(optarg)) {
+        fprintf(stderr, "ERR - Invalid CIDR map file: %s\n", optarg);
         return (EXIT_FAILURE);
       }
-      config->match = loadMatchTemplates(optarg);
+      config->cidr_map_file = optarg;
       break;
 
-    case 'm':
-      /* add template to match list */
-      config->match = addMatchTemplate(optarg);
-      break;
-
-    case 'L':
-      /* load match lines from file and convert to templates */
-      if (!validate_file_path(optarg)) {
+    case 'D':
+      /* set target video duration */
+      if (!safe_parse_int(optarg, 10, 3600, (int *)&config->target_video_duration)) {
+        fprintf(stderr, "ERR - Invalid video duration: %s (must be 10-3600 seconds)\n", optarg);
         return (EXIT_FAILURE);
       }
-      config->match = loadMatchLines(optarg);
-      break;
-
-    case 'l':
-      /* convert match line and add as template */
-      config->match = addMatchLine(optarg);
       break;
 
     default:
@@ -349,7 +326,8 @@ int main(int argc, char *argv[])
   if (gethostname(config->hostname, MAXHOSTNAMELEN) != 0)
   {
     display(LOG_ERR, "Unable to get hostname");
-    strcpy(config->hostname, "unknown");
+    strncpy(config->hostname, "unknown", MAXHOSTNAMELEN);
+    config->hostname[MAXHOSTNAMELEN] = '\0';
   }
 
   config->cur_pid = getpid();
@@ -362,25 +340,43 @@ int main(int argc, char *argv[])
    * get to work
    */
 
-  /* process all the files */
+  /* Initialize processing for all files */
+  if (initProcessing() != EXIT_SUCCESS) {
+    fprintf(stderr, "ERR - Failed to initialize processing\n");
+    cleanup();
+    return (EXIT_FAILURE);
+  }
+
+  /* Process all the files into a single timeline */
   while (optind < argc)
   {
-    if (!validate_file_path(argv[optind])) {
-      fprintf(stderr, "ERR - Invalid file path: %s\n", argv[optind]);
+    /* Update current time in main loop (not in signal handler) */
+    if (time(&config->current_time) EQ - 1) {
+      display(LOG_ERR, "Unable to update current time");
+      finalizeProcessing();
       cleanup();
       return (EXIT_FAILURE);
     }
-    processFile(argv[optind++]);
+
+    if (!validate_file_path(argv[optind])) {
+      fprintf(stderr, "ERR - Invalid file path: %s\n", argv[optind]);
+      finalizeProcessing();
+      cleanup();
+      return (EXIT_FAILURE);
+    }
+    if (processFileIntoTimeline(argv[optind++]) != EXIT_SUCCESS) {
+      fprintf(stderr, "ERR - Failed to process file\n");
+      finalizeProcessing();
+      cleanup();
+      return (EXIT_FAILURE);
+    }
   }
 
-  if (config->match)
-  {
-    /* XXX should print match metrict */
-  }
-  else
-  {
-    /* print the templates we have found */
-    showTemplates();
+  /* Finalize processing and generate video */
+  if (finalizeProcessing() != EXIT_SUCCESS) {
+    fprintf(stderr, "ERR - Failed to finalize processing\n");
+    cleanup();
+    return (EXIT_FAILURE);
   }
 
   /*
@@ -398,6 +394,7 @@ int main(int argc, char *argv[])
  *
  ****/
 
+#ifdef DEBUG
 void show_info(void)
 {
   fprintf(stderr, "%s v%s [%s - %s]\n", PROGNAME, VERSION, __DATE__, __TIME__);
@@ -409,6 +406,7 @@ void show_info(void)
   fprintf(stderr, "See the GNU General Public License for details.\n");
   fprintf(stderr, "\n");
 }
+#endif
 
 /*****
  *
@@ -435,33 +433,33 @@ PRIVATE void print_help(void)
   fprintf(stderr, "syntax: %s [options] filename [filename ...]\n", PACKAGE);
 
 #ifdef HAVE_GETOPT_LONG
-  fprintf(stderr, " -c|--cluster           show invariable fields in output\n");
+  fprintf(stderr, " -c|--codec CODEC       video codec (default: libx264)\n");
+  fprintf(stderr, "                        examples: libx264, libx265, libvpx-vp9\n");
+  fprintf(stderr, " -C|--cidr-map FILE     CIDR mapping file (default: cidr_map.txt)\n");
   fprintf(stderr, " -d|--debug (0-9)       enable debugging info\n");
-  fprintf(stderr, " -g|--greedy            ignore quotes\n");
+  fprintf(stderr, " -D|--duration SECS     target video duration in seconds (default: 300)\n");
+  fprintf(stderr, "                        FPS and decay auto-scale based on data span\n");
+  fprintf(stderr, " -f|--fps FPS           video framerate (default: auto-scaled)\n");
+  fprintf(stderr, "                        baseline: 1 day = 3 FPS, scales linearly\n");
   fprintf(stderr, " -h|--help              this info\n");
-  fprintf(stderr, " -l|--line {line}       show all lines that match template of {line}\n");
-  fprintf(stderr, " -L|--linefile {fname}  show all the lines that match templates of lines in {fname}\n");
-  fprintf(stderr, " -m|--match {template}  show all lines that match {template}\n");
-  fprintf(stderr, " -M|--matchfile {fname} show all the lines that match templates in {fname}\n");
-  fprintf(stderr, " -n|--cnum {num}        max cluster args [default: %d]\n", MAX_ARGS_IN_FIELD);
-  fprintf(stderr, " -t|--templates {file}  load templates to ignore\n");
+  fprintf(stderr, " -o|--output DIR        output directory for frames/video (default: plots)\n");
+  fprintf(stderr, " -p|--period DURATION   time bin period (default: 1m)\n");
+  fprintf(stderr, "                        examples: 1m, 5m, 15m, 30m, 60m, 120s, 1h\n");
   fprintf(stderr, " -v|--version           display version information\n");
-  fprintf(stderr, " -w|--write {file}      save templates to file\n");
-  fprintf(stderr, " filename               one or more files to process, use '-' to read from stdin\n");
+  fprintf(stderr, " -V|--no-video          don't generate video (keep frames only)\n");
+  fprintf(stderr, " filename               one or more files to process\n");
 #else
-  fprintf(stderr, " -c            show invariable fields in output\n");
+  fprintf(stderr, " -c {codec}    video codec (default: libx264)\n");
+  fprintf(stderr, " -C {file}     CIDR mapping file (default: cidr_map.txt)\n");
   fprintf(stderr, " -d {lvl}      enable debugging info\n");
-  fprintf(stderr, " -g            ignore quotes\n");
+  fprintf(stderr, " -D {secs}     target video duration (default: 300)\n");
+  fprintf(stderr, " -f {fps}      video framerate (default: auto-scaled)\n");
   fprintf(stderr, " -h            this info\n");
-  fprintf(stderr, " -l {line}     show all lines that match template of {line}\n");
-  fprintf(stderr, " -L {fname}    show all the lines that match templates of lines in {fname}\n");
-  fprintf(stderr, " -m {template} show all lines that match {template}\n");
-  fprintf(stderr, " -M {fname}    show all the lines that match templates in {fname}\n");
-  fprintf(stderr, " -n {num}      max cluster args [default: %d]\n", MAX_ARGS_IN_FIELD);
-  fprintf(stderr " -t {file}     load templates to ignore\n");
+  fprintf(stderr, " -o {dir}      output directory for frames/video (default: plots)\n");
+  fprintf(stderr, " -p {period}   time bin period (default: 1m)\n");
   fprintf(stderr, " -v            display version information\n");
-  fprintf(stderr, " -w {file}     save templates to file\n");
-  fprintf(stderr, " filename      one or more files to process, use '-' to read from stdin\n");
+  fprintf(stderr, " -V            don't generate video (keep frames only)\n");
+  fprintf(stderr, " filename      one or more files to process\n");
 #endif
 
   fprintf(stderr, "\n");
@@ -475,9 +473,6 @@ PRIVATE void print_help(void)
 
 PRIVATE void cleanup(void)
 {
-  /* free any match templates */
-  cleanMatchList();
-
   if (config->outFile_st != NULL)
     fclose(config->outFile_st);
   XFREE(config->hostname);
@@ -492,25 +487,29 @@ PRIVATE void cleanup(void)
  *
  * interrupt handler (current time)
  *
+ * SECURITY: Signal handlers must only use async-signal-safe functions
+ * Per POSIX, only sig_atomic_t variables should be modified
+ *
  *****/
 
 void ctime_prog(int signo)
 {
-  /* disable SIGALRM */
-  signal(SIGALRM, SIG_IGN);
-  /* update current time */
+  /* Simply set a flag for main loop to handle */
+  /* DO NOT call fprintf() or other non-async-signal-safe functions here */
 
-  if (time(&config->current_time) EQ - 1)
-    fprintf(stderr, "ERR - Unable to update current time\n");
-  config->alarm_count++;
-  if (config->alarm_count EQ 60)
+  (void)signo;  /* Unused but required by signal handler signature */
+
+  /* Increment alarm count using only safe operations */
+  static volatile sig_atomic_t alarm_counter = 0;
+
+  alarm_counter++;
+
+  if (alarm_counter >= 60)
   {
-    reload = TRUE;
-    config->alarm_count = 0;
+    reload = 1;
+    alarm_counter = 0;
   }
 
-  /* reset SIGALRM */
-  signal(SIGALRM, ctime_prog);
-  /* reset alarm */
+  /* Reset alarm for next iteration */
   alarm(ALARM_TIMER);
 }

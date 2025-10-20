@@ -126,7 +126,7 @@ void ipIntToString(uint32_t ip, char *buf, size_t buf_size)
  *
  * PERFORMANCE: ~20ns per call (simple strstr)
  ****/
-PRIVATE const char *findPacketTime(const char *line)
+const char *findPacketTime(const char *line)
 {
     return strstr(line, "PacketTime:");
 }
@@ -136,7 +136,7 @@ PRIVATE const char *findPacketTime(const char *line)
  *
  * PERFORMANCE: ~30ns per call
  ****/
-PRIVATE const char *findIPv4Protocol(const char *line)
+const char *findIPv4Protocol(const char *line)
 {
     const char *p = strstr(line, "IPv4/");
     if (!p) {
@@ -193,7 +193,7 @@ int parseTimestamp(const char *time_str, time_t *timestamp, uint32_t *microsecon
     }
 
     /* Store microseconds (if parsed) */
-    *microseconds = (parsed == 7) ? usec : 0;
+    *microseconds = (parsed == 7) ? (uint32_t)usec : 0;
 
     return TRUE;
 }
@@ -220,7 +220,7 @@ int extractIPPort(const char *str, char *ip_buf, int ip_buf_size, uint16_t *port
     }
 
     /* Extract IP address (until ':') */
-    while (*p && *p != ':' && ip_len < ip_buf_size - 1) {
+    while (*p && *p != ':' && ip_len + 1 < ip_buf_size) {
         if (isdigit(*p) || *p == '.') {
             ip_buf[ip_len++] = *p;
         } else if (*p != ' ') {
@@ -238,9 +238,19 @@ int extractIPPort(const char *str, char *ip_buf, int ip_buf_size, uint16_t *port
 
     /* Skip ':' and extract port */
     p++;
-    *port = (uint16_t)atoi(p);
 
-    return (ip_len > 0 && *port > 0);
+    /* Use strtol for safer integer parsing */
+    char *endptr;
+    long port_val = strtol(p, &endptr, 10);
+
+    /* Validate port number */
+    if (port_val < 0 || port_val > 65535 || endptr == p) {
+        return FALSE;
+    }
+
+    *port = (uint16_t)port_val;
+
+    return (ip_len > 0);
 }
 
 /****
@@ -336,6 +346,7 @@ int parseHoneypotLine(const char *line, HoneypotEvent_t *event)
 
     event->src_port = port;
     strncpy(event->src_ip_str, ip_buf, sizeof(event->src_ip_str) - 1);
+    event->src_ip_str[sizeof(event->src_ip_str) - 1] = '\0';
 
     /* Find " -> " separator */
     p = strstr(p, " -> ");
@@ -373,6 +384,7 @@ int parseHoneypotLine(const char *line, HoneypotEvent_t *event)
 
     event->dst_port = port;
     strncpy(event->dst_ip_str, ip_buf, sizeof(event->dst_ip_str) - 1);
+    event->dst_ip_str[sizeof(event->dst_ip_str) - 1] = '\0';
 
     /* TODO: Extract TCP flags if needed */
 
@@ -419,7 +431,7 @@ GzipStream_t *openGzipStream(const char *file_path)
 
     /* Allocate read buffer */
     stream->buffer_size = LOG_PARSER_BUFFER_SIZE;
-    stream->buffer = (char *)XMALLOC(stream->buffer_size);
+    stream->buffer = (char *)XMALLOC((int)stream->buffer_size);
     if (!stream->buffer) {
         gzclose(stream->gz_file);
         XFREE(stream);
@@ -483,7 +495,7 @@ int readLineGzip(GzipStream_t *stream, char *line_buf, size_t buf_size)
     }
 
     /* Use gzgets for line-by-line reading */
-    if (gzgets(stream->gz_file, line_buf, buf_size) == NULL) {
+    if (gzgets(stream->gz_file, line_buf, (int)buf_size) == NULL) {
         stream->eof_reached = TRUE;
         return FALSE;
     }
@@ -521,19 +533,19 @@ void printParserStats(const ParserStats_t *stats)
     fprintf(stderr, "Lines parsed OK:     %lu\n", stats->lines_parsed_ok);
     fprintf(stderr, "Lines parse failed:  %lu\n", stats->lines_parse_failed);
     fprintf(stderr, "Bytes read:          %lu (%.2f MB)\n",
-            stats->bytes_read, stats->bytes_read / (1024.0 * 1024.0));
+            stats->bytes_read, (double)stats->bytes_read / (1024.0 * 1024.0));
 
     if (stats->parse_time_sec > 0) {
         fprintf(stderr, "Parse time:          %.2f seconds\n", stats->parse_time_sec);
         fprintf(stderr, "Lines/second:        %.0f\n",
-                stats->lines_processed / stats->parse_time_sec);
+                (double)stats->lines_processed / stats->parse_time_sec);
         fprintf(stderr, "MB/second:           %.2f\n",
-                (stats->bytes_read / (1024.0 * 1024.0)) / stats->parse_time_sec);
+                ((double)stats->bytes_read / (1024.0 * 1024.0)) / stats->parse_time_sec);
     }
 
     if (stats->lines_processed > 0) {
         fprintf(stderr, "Success rate:        %.2f%%\n",
-                (100.0 * stats->lines_parsed_ok) / stats->lines_processed);
+                (100.0 * (double)stats->lines_parsed_ok) / (double)stats->lines_processed);
     }
 
     fprintf(stderr, "=========================\n\n");
@@ -571,8 +583,6 @@ int processGzipFile(const char *file_path,
     /* Start timing */
     gettimeofday(&start_time, NULL);
 
-    fprintf(stderr, "Processing: %s\n", file_path);
-
     /* Read and parse each line */
     while (readLineGzip(stream, line_buf, sizeof(line_buf))) {
         /* Parse honeypot sensor log line */
@@ -601,8 +611,8 @@ int processGzipFile(const char *file_path,
 
     /* Calculate elapsed time */
     stream->stats.parse_time_sec =
-        (end_time.tv_sec - start_time.tv_sec) +
-        (end_time.tv_usec - start_time.tv_usec) / 1000000.0;
+        (double)(end_time.tv_sec - start_time.tv_sec) +
+        (double)(end_time.tv_usec - start_time.tv_usec) / 1000000.0;
 
     /* Print statistics */
     printParserStats(&stream->stats);

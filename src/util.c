@@ -43,11 +43,11 @@
  *
  ****/
 
-PRIVATE char *restricted_environ[] = {
+PRIVATE const char *restricted_environ[] = {
     "IFS= \t\n",
     "PATH= /bin:/usr/bin",
     0};
-PRIVATE char *preserve_environ[] = {
+PRIVATE const char *preserve_environ[] = {
     "TZ",
     0};
 
@@ -78,9 +78,7 @@ CODE prioritynames[] =
         {"warning", LOG_WARNING},
         {NULL, -1}};
 #else
-#ifdef LINUX
-extern CODE prioritynames[];
-#endif
+/* prioritynames is provided by syslog.h on Linux */
 #endif
 
 /****
@@ -90,7 +88,16 @@ extern CODE prioritynames[];
  ****/
 
 extern Config_t *config;
-extern char **environ;
+/* environ is provided by unistd.h */
+
+/****
+ *
+ * forward declarations for static functions
+ *
+ ****/
+
+static int safe_open(const char *filename);
+static void cleanup_pid_file(const char *filename);
 
 /****
  *
@@ -104,7 +111,7 @@ extern char **environ;
  *
  ****/
 
-int display(int level, char *format, ...)
+int display(int level, const char *format, ...)
 {
   PRIVATE va_list args;
   PRIVATE char tmp_buf[SYSLOG_MAX];
@@ -282,7 +289,6 @@ int create_pid_file(const char *filename)
 {
   int fd;
   FILE *lockfile;
-  size_t len;
   pid_t pid;
 
   /* remove old pid file if it exists */
@@ -369,7 +375,8 @@ void sanitize_environment(void)
 {
   int i;
   char **new_environ;
-  char *ptr, *value, *var;
+  char *ptr, *value;
+  const char *var;
   size_t arr_size = 1;
   size_t arr_ptr = 0;
   size_t len;
@@ -390,14 +397,14 @@ void sanitize_environment(void)
   }
 
   new_size += (arr_size * sizeof(char *));
-  new_environ = (char **)XMALLOC(new_size);
+  new_environ = (char **)XMALLOC((int)new_size);
   new_environ[arr_size - 1] = 0;
   ptr = (char *)new_environ + (arr_size * sizeof(char *));
   for (i = 0; (var = restricted_environ[i]) != 0; i++)
   {
     new_environ[arr_ptr++] = ptr;
     len = strlen(var);
-    XMEMCPY(ptr, var, len + 1);
+    XMEMCPY(ptr, var, (int)(len + 1));
     ptr += len + 1;
   }
 
@@ -407,11 +414,64 @@ void sanitize_environment(void)
       continue;
     new_environ[arr_ptr++] = ptr;
     len = strlen(var);
-    XMEMCPY(ptr, var, len);
+    XMEMCPY(ptr, var, (int)len);
     *(ptr + len + 1) = '=';
-    XMEMCPY(ptr + len + 2, value, strlen(value) + 1);
+    XMEMCPY(ptr + len + 2, value, (int)(strlen(value) + 1));
     ptr += len + strlen(value) + 2;
   }
 
   environ = new_environ;
+}
+
+/****
+ * Secure file open with symlink protection
+ * SECURITY: Uses O_NOFOLLOW to prevent symlink attacks
+ ****/
+PUBLIC FILE *secure_fopen(const char *path, const char *mode)
+{
+  int flags = 0;
+  int fd;
+  FILE *fp;
+
+  if (!path || !mode) {
+    return NULL;
+  }
+
+  /* Determine flags based on mode */
+  if (strchr(mode, 'r') && !strchr(mode, '+')) {
+    flags = O_RDONLY | O_NOFOLLOW;
+  } else if (strchr(mode, 'w')) {
+    flags = O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW;
+  } else if (strchr(mode, 'a')) {
+    flags = O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW;
+  } else if (strchr(mode, '+')) {
+    if (strchr(mode, 'r')) {
+      flags = O_RDWR | O_NOFOLLOW;
+    } else if (strchr(mode, 'w')) {
+      flags = O_RDWR | O_CREAT | O_TRUNC | O_NOFOLLOW;
+    } else if (strchr(mode, 'a')) {
+      flags = O_RDWR | O_CREAT | O_APPEND | O_NOFOLLOW;
+    }
+  } else {
+    fprintf(stderr, "ERR - Invalid file mode: %s\n", mode);
+    return NULL;
+  }
+
+  /* Open file with O_NOFOLLOW to prevent symlink attacks */
+  fd = open(path, flags, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+  if (fd == -1) {
+    if (errno == ELOOP) {
+      fprintf(stderr, "ERR - Symbolic link detected, access denied: %s\n", path);
+    }
+    return NULL;
+  }
+
+  /* Convert file descriptor to FILE* */
+  fp = fdopen(fd, mode);
+  if (fp == NULL) {
+    close(fd);
+    return NULL;
+  }
+
+  return fp;
 }

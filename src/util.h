@@ -51,12 +51,12 @@
  *
  ****/
 
-int display(int level, char *format, ...);
+int display(int level, const char *format, ...);
 int open_devnull(int fd);
 int is_dir_safe(const char *dir);
 int create_pid_file(const char *filename);
-static int safe_open(const char *filename);
-static void cleanup_pid_file(const char *filename);
+/* safe_open() and cleanup_pid_file() are static functions in util.c */
 void sanitize_environment(void);
+FILE *secure_fopen(const char *path, const char *mode);
 
 #endif /* end of UTIL_DOT_H */

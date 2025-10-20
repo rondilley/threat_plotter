@@ -48,13 +48,12 @@
 #endif
 
 #include "../include/common.h"
-#include "hash.h"
 #include "util.h"
 #include "mem.h"
-#include "parser.h"
-#include "bintree.h"
-#include "match.h"
 #include "log_parser.h"
+#include "hilbert.h"
+#include "timebin.h"
+#include "visualize.h"
 
 /****
  *
@@ -68,30 +67,18 @@
  *
  ****/
 
-struct Fields_s
-{
-  int count;
-  struct Fields_s *next;
-  struct binTree_s *head;
-};
-
-typedef struct
-{
-  char lBuf[LINEBUF_SIZE];
-  size_t count;
-  struct Fields_s *head;
-} metaData_t;
-
 /****
  *
  * function prototypes
  *
  ****/
 
-int printTemplate(const struct hashRec_s *hashRec);
-int processFile(const char *fName);
-int showTemplates(void);
-int loadTemplateFile(const char *fName);
-char *clusterTemplate(char *template, metaData_t *md, char *oBuf, int bufSize);
+/* Legacy single-file interface */
+int processHoneypotFile(const char *fName);
+
+/* Multi-file interface */
+int initProcessing(void);
+int processFileIntoTimeline(const char *fName);
+int finalizeProcessing(void);
 
 #endif /* TPLOT_DOT_H */

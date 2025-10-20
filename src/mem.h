@@ -89,7 +89,7 @@ void *xrealloc_(void *ptr, int size, const char *filename,
                 const int linenumber);
 void *xmemset_(void *ptr, const char value, const int size,
                const char *filename, const int linenumber);
-void *xmemcpy_(void *d_ptr, void *s_ptr, const int size, const char *filename,
+void *xmemcpy_(void *d_ptr, const void *s_ptr, const int size, const char *filename,
                const int linenumber);
 int xmemcmp_(const void *s1, const void *s2, size_t n, const char *filename,
              const int linenumber);
@@ -102,5 +102,7 @@ char *xstrcpy_(char *d_ptr, const char *s_ptr, const char *filename,
                const int linenumber);
 char *xstrncpy_(char *d_ptr, const char *s_ptr, const size_t len,
                 const char *filename, const int linenumber);
+char *xmemncpy_(char *d_ptr, const char *s_ptr, const size_t len,
+                const int size, const char *filename, const int linenumber);
 
 #endif /* end of UTIL_DOT_H */
