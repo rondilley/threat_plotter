@@ -117,6 +117,10 @@ typedef struct {
     DecayCacheEntry_t *decay_cache;  /* Array of cache entries */
     uint32_t cache_size;              /* Current number of cached entries */
     uint32_t cache_capacity;          /* Maximum cache capacity */
+
+    /* Residue map - persistent attack memory across all time bins */
+    uint8_t *residue_map;             /* 2D bitmap: residue_map[y * dimension + x] */
+    uint32_t residue_count;           /* Number of coordinates marked in residue map */
 } TimeBinManager_t;
 
 /****
@@ -150,5 +154,9 @@ const char *formatTimeBinDuration(uint32_t seconds);
 int updateDecayCache(TimeBinManager_t *manager, uint32_t x, uint32_t y, time_t event_time, uint32_t intensity);
 void applyDecayToHeatmap(TimeBinManager_t *manager, TimeBin_t *bin);
 void cleanExpiredCacheEntries(TimeBinManager_t *manager, time_t current_time);
+
+/* Residue map operations - persistent attack memory */
+void markResidue(TimeBinManager_t *manager, uint32_t x, uint32_t y);
+uint8_t getResidue(TimeBinManager_t *manager, uint32_t x, uint32_t y);
 
 #endif /* TIMEBIN_DOT_H */

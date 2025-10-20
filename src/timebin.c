@@ -630,12 +630,26 @@ TimeBinManager_t *createTimeBinManager(TimeBinConfig_t *config_in)
     memset(manager->decay_cache, 0,
            sizeof(DecayCacheEntry_t) * manager->cache_capacity);
 
+    /* Initialize residue map - persistent attack memory */
+    uint32_t residue_map_size = manager->config.dimension * manager->config.dimension;
+    manager->residue_map = (uint8_t *)XMALLOC((int)residue_map_size);
+
+    if (!manager->residue_map) {
+        XFREE(manager->decay_cache);
+        XFREE(manager);
+        return NULL;
+    }
+
+    memset(manager->residue_map, 0, residue_map_size);
+    manager->residue_count = 0;
+
 #ifdef DEBUG
     if (config->debug >= 1) {
-        fprintf(stderr, "DEBUG - Created time bin manager: bin_size=%s, order=%u, decay=%us\n",
+        fprintf(stderr, "DEBUG - Created time bin manager: bin_size=%s, order=%u, decay=%us, residue_map=%u bytes\n",
                 formatTimeBinDuration(config_in->bin_seconds),
                 config_in->hilbert_order,
-                config_in->decay_seconds);
+                config_in->decay_seconds,
+                residue_map_size);
     }
 #endif
 
@@ -690,6 +704,10 @@ void destroyTimeBinManager(TimeBinManager_t *manager)
 
     if (manager->decay_cache) {
         XFREE(manager->decay_cache);
+    }
+
+    if (manager->residue_map) {
+        XFREE(manager->residue_map);
     }
 
     XFREE(manager);
@@ -782,6 +800,9 @@ int processEvent(TimeBinManager_t *manager, time_t event_time, uint32_t x, uint3
 
     /* Update decay cache with this coordinate */
     updateDecayCache(manager, x, y, event_time, 1);
+
+    /* Mark coordinate in residue map for persistent attack memory */
+    markResidue(manager, x, y);
 
     /* Add event to current bin */
     return addEventToBin(manager->current_bin, x, y);
@@ -1068,4 +1089,91 @@ void cleanExpiredCacheEntries(TimeBinManager_t *manager, time_t current_time)
                 manager->cache_size);
     }
 #endif
+}
+
+/****
+ *
+ * Mark coordinate in residue map
+ *
+ * DESCRIPTION:
+ *   Permanently marks a coordinate in the residue map as having been attacked.
+ *   This creates a persistent visual "memory" that shows which IP positions
+ *   have historically been sources of attacks across all time bins.
+ *
+ * PARAMETERS:
+ *   manager - Pointer to TimeBinManager_t with residue map
+ *   x - X coordinate to mark
+ *   y - Y coordinate to mark
+ *
+ * RETURNS:
+ *   void
+ *
+ * SIDE EFFECTS:
+ *   Sets residue_map[y * dimension + x] = 1 if not already set
+ *   Increments residue_count if this is a new marked coordinate
+ *
+ ****/
+void markResidue(TimeBinManager_t *manager, uint32_t x, uint32_t y)
+{
+    uint32_t idx;
+
+    if (!manager || !manager->residue_map) {
+        return;
+    }
+
+    /* Check bounds */
+    if (x >= manager->config.dimension || y >= manager->config.dimension) {
+        return;
+    }
+
+    /* Calculate index into residue map */
+    idx = y * manager->config.dimension + x;
+
+    /* Mark this coordinate if not already marked */
+    if (manager->residue_map[idx] == 0) {
+        manager->residue_map[idx] = 1;
+        manager->residue_count++;
+
+#ifdef DEBUG
+        if (config->debug >= 5) {
+            fprintf(stderr, "DEBUG - Marked residue at (%u,%u), total residue coords: %u\n",
+                    x, y, manager->residue_count);
+        }
+#endif
+    }
+}
+
+/****
+ *
+ * Get residue status for coordinate
+ *
+ * DESCRIPTION:
+ *   Checks if a coordinate has been marked in the residue map.
+ *
+ * PARAMETERS:
+ *   manager - Pointer to TimeBinManager_t with residue map
+ *   x - X coordinate to check
+ *   y - Y coordinate to check
+ *
+ * RETURNS:
+ *   1 if coordinate is marked in residue map
+ *   0 if not marked or out of bounds
+ *
+ ****/
+uint8_t getResidue(TimeBinManager_t *manager, uint32_t x, uint32_t y)
+{
+    uint32_t idx;
+
+    if (!manager || !manager->residue_map) {
+        return 0;
+    }
+
+    /* Check bounds */
+    if (x >= manager->config.dimension || y >= manager->config.dimension) {
+        return 0;
+    }
+
+    /* Calculate index and return residue status */
+    idx = y * manager->config.dimension + x;
+    return manager->residue_map[idx];
 }

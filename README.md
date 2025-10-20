@@ -32,7 +32,8 @@ This tool helps security analysts visualize attack patterns and threat data from
 ### Visualization
 - **Hilbert curve mapping**: Space-filling curve preserves CIDR locality
 - **Automatic CIDR clustering**: Adjacent IPs appear at nearby coordinates
-- **Non-routable IP overlay**: Gray mask shows RFC1918 private, loopback, multicast, reserved ranges
+- **Non-routable IP overlay**: Dark blue mask shows RFC1918 private, loopback, multicast, reserved ranges
+- **Residue tracking**: Dark grey markers show historical attack memory - persistent indicators for all IPs that have ever attacked
 - **Linear color scaling**: Maximum visibility mode - even single events are clearly visible
 - **Time binning**: Configurable time windows (1m, 5m, 30m, 1h)
 - **Decay visualization**: IPs fade over time (auto-scaled based on data span, default 3 hours for 1 day)
@@ -45,28 +46,6 @@ This tool helps security analysts visualize attack patterns and threat data from
 - **Timezone detection**: UTC-12 to UTC+14 coverage
 - **Proportional allocation**: US timezones get more X-axis space due to higher CIDR density
 - **Works without**: CIDR clustering functions with direct IP mapping (no external files required)
-
-## Current Status
-
-**Phase**: Production Ready - Full implementation complete and tested
-
-**Implemented**:
-- [DONE] High-performance log parser (125K+ lines/sec)
-- [DONE] Gzip streaming decompression
-- [DONE] Honeypot sensor log format support
-- [DONE] IP/port/timestamp/protocol extraction
-- [DONE] Hilbert curve coordinate mapping with CIDR awareness
-- [DONE] Time binning and aggregation with decay cache
-- [DONE] PPM visualization rendering
-- [DONE] Video frame generation (MP4)
-- [DONE] GeoIP timezone lookup (libmaxminddb)
-- [DONE] CIDR allocation mapping with proportional bands
-
-**Planned**:
-- FortiGate firewall log parser
-- Additional output formats (SVG, JSON)
-- Real-time streaming mode
-- Interactive web visualization
 
 ## Log Format Support
 
@@ -199,13 +178,16 @@ Each frame shows a heatmap of attack sources over that time period, with CIDR bl
 - **Hilbert curve**: Square region in center of frame
 - **CIDR clustering**: Related IPs (same /8, /16, /24) appear as visual clusters
 - **Dark blue overlay**: Non-routable IP space (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, etc.)
+- **Dark grey residue**: Historical attack memory showing all coordinates that have been attacked across entire timeline
 - **Color scale**: Black background with attack intensity gradient
-  - Black: No activity
+  - Black: No activity, never attacked
+  - Dark grey (54,54,54): No current activity, but previously attacked (residue)
   - White: Low volume attacks (single events clearly visible)
   - Yellow: Medium volume attacks
   - Red: High volume attacks (larger volume = more red)
 - **Decay effect**: IPs fade over time (auto-scaled, default 3 hours for 1 day of data)
 - **Static positioning**: Each IP always appears at the same coordinate across all frames
+- **Pattern emergence**: Over time, residue reveals CIDR ranges commonly used for attacks
 
 **Enhanced Mode (With CIDR Mapping)**:
 - **X-axis**: Geographic timezone (UTC-12 to UTC+14), proportional to CIDR density

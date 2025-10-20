@@ -86,6 +86,9 @@ CIDR clustering provides vertical separation while keeping related network block
 .B Color intensity
 Pixel brightness indicates the number of events from that source IP. Brighter areas represent more active attack sources.
 .TP
+.B Residue markers
+Dark grey (RGB 54,54,54) persistent indicators show all coordinates that have been attacked across the entire timeline. These markers remain visible even when no current activity exists, revealing CIDR ranges commonly used for attacks.
+.TP
 .B Decay cache
 Recently active but currently inactive IPs fade gradually, showing temporal patterns and persistent threat actors.
 .TP

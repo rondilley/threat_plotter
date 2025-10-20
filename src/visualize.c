@@ -442,12 +442,14 @@ RGB_t intensityToColor(uint32_t intensity, uint32_t max_intensity)
  * DESCRIPTION:
  *   Renders heatmap to PPM format with color gradient and non-routable IP overlay.
  *   Centers square Hilbert curve in rectangular frame. Uses cached mask for efficiency.
+ *   Renders residue map as dark grey layer for historical attack memory.
  *
  * PARAMETERS:
  *   filename - Output file path
  *   bin - TimeBin_t with heatmap data
  *   width - Output width in pixels
  *   height - Output height in pixels
+ *   residue_map - Persistent attack memory bitmap (may be NULL)
  *
  * RETURNS:
  *   TRUE on success, FALSE on error
@@ -456,7 +458,7 @@ RGB_t intensityToColor(uint32_t intensity, uint32_t max_intensity)
  *   Creates/overwrites file, may create and cache non-routable mask
  *
  ****/
-int writePPM(const char *filename, const TimeBin_t *bin, uint32_t width, uint32_t height)
+int writePPM(const char *filename, const TimeBin_t *bin, uint32_t width, uint32_t height, const uint8_t *residue_map)
 {
     FILE *fp;
     uint32_t x, y, src_x, src_y;
@@ -552,14 +554,27 @@ int writePPM(const char *filename, const TimeBin_t *bin, uint32_t width, uint32_
                 if (src_x < bin->dimension && src_y < bin->dimension) {
                     idx = src_y * bin->dimension + src_x;
                     intensity = bin->heatmap[idx];
-                    color = intensityToColor(intensity, bin->max_intensity);
+                    int residue_shown = FALSE;
+
+                    /* Check residue map first - show grey for historical attacks with no current activity */
+                    if (residue_map && residue_map[idx] && intensity == 0) {
+                        /* Dark grey residue - persistent attack memory (15% darker than before) */
+                        color.r = 54;
+                        color.g = 54;
+                        color.b = 54;
+                        residue_shown = TRUE;
+                    } else {
+                        /* Normal heatmap color gradient */
+                        color = intensityToColor(intensity, bin->max_intensity);
+                    }
 
                     /* Apply dark blue overlay for non-routable IP space */
                     is_nonroutable = (nonroutable_mask && nonroutable_mask[idx]);
-                    if (is_nonroutable) {
-                        /* If no activity, show dark blue base color
+                    if (is_nonroutable && !residue_shown) {
+                        /* If no activity and no residue, show dark blue base color
                          * If activity present, blend with moderately dark blue
                          * This makes private IP space visible against black background
+                         * Note: Skip blue overlay if residue is shown to avoid obscuring it
                          */
                         if (intensity == 0) {
                             /* No activity: show darker blue base (0, 0, 30) */
@@ -657,16 +672,17 @@ int generateBinFilename(char *buf, size_t buf_size, const char *dir,
  *   output_path - Output file path
  *   width - Image width
  *   height - Image height
+ *   residue_map - Persistent attack memory bitmap (may be NULL)
  *
  * RETURNS:
  *   TRUE on success, FALSE on error
  *
  ****/
-int renderTimeBin(const TimeBin_t *bin, const char *output_path, uint32_t width, uint32_t height)
+int renderTimeBin(const TimeBin_t *bin, const char *output_path, uint32_t width, uint32_t height, const uint8_t *residue_map)
 {
     if (!bin || !output_path) {
         return FALSE;
     }
 
-    return writePPM(output_path, bin, width, height);
+    return writePPM(output_path, bin, width, height, residue_map);
 }
