@@ -56,6 +56,9 @@ Output directory for frame images and video file (default: plots). Directory wil
 .B \-p, \-\-period \fIduration\fP
 Time bin period for event aggregation (default: 1m). Each time bin generates one output frame. Supported formats: 1m, 5m, 15m, 30m, 60m, 120s, 1h, 2h. Shorter periods provide finer temporal resolution but generate more frames. Longer periods reveal broader attack patterns.
 .TP
+.B \-t, \-\-timestamp
+Show timestamp overlay at bottom of each frame. Displays the start time of each time bin in white text (YYYY-MM-DD HH:MM:SS format) for video reference. Adds 30 pixels of vertical space below the Hilbert curve visualization.
+.TP
 .B \-v, \-\-version
 Display version information and exit.
 .TP
@@ -69,7 +72,7 @@ One or more honeypot log files to process. Gzip-compressed files (.gz) are autom
 The tool generates two types of output:
 .TP
 .B Frame images
-PPM format images named \fIframe_YYYYMMDD_HHMMSS_NNNN.ppm\fP where the timestamp indicates the start of the time bin. Each frame is approximately 15MB at 3440x1440 resolution.
+PPM format images named \fIframe_YYYYMMDD_HHMMSS_NNNN.ppm\fP where the timestamp indicates the start of the time bin. Each frame is approximately 48MB at 4096x4096 square resolution (matching Hilbert curve dimensions).
 .TP
 .B Video file
 MP4 video file named \fIoutput.mp4\fP containing all frames encoded with the specified codec and framerate. Generated automatically unless \-V is specified.
@@ -119,6 +122,10 @@ High-framerate video with H.265 codec:
 .TP
 Debug mode with custom CIDR mapping:
 .B tplot -d 2 -C custom_cidr_map.txt -p 5m logs/sensor.log.gz
+.PP
+.TP
+Video with timestamp overlay for reference:
+.B tplot -p 5m -t logs/sensor.log.gz
 
 .SH LOG FORMAT
 .B tplot

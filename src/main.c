@@ -222,14 +222,15 @@ int main(int argc, char *argv[])
   /* set visualization defaults */
   config->time_bin_seconds = 60;  /* 1 minute default */
   config->output_dir = NULL;
-  config->viz_width = 3440;       /* UWQHD 21:9 default */
-  config->viz_height = 1440;
+  config->viz_width = 4096;       /* Match Hilbert curve dimension (2^12) */
+  config->viz_height = 4096;
   config->generate_video = 1;     /* Generate video by default */
   config->video_fps = 3;          /* 3 FPS default (auto-scaled based on data span) */
   config->video_codec = "libx264"; /* H.264 codec default */
   config->cidr_map_file = NULL;   /* Will try default location */
   config->target_video_duration = 300;  /* 5 minutes default */
   config->auto_scale = 1;         /* Auto-scale FPS and decay by default */
+  config->show_timestamp = 0;     /* Timestamp overlay off by default */
 
   while (1)
   {
@@ -246,10 +247,11 @@ int main(int argc, char *argv[])
         {"codec", required_argument, 0, 'c'},
         {"cidr-map", required_argument, 0, 'C'},
         {"duration", required_argument, 0, 'D'},
+        {"timestamp", no_argument, 0, 't'},
         {0, no_argument, 0, 0}};
-    c = getopt_long(argc, argv, "vd:hp:o:Vf:c:C:D:", long_options, &option_index);
+    c = getopt_long(argc, argv, "vd:hp:o:Vf:c:C:D:t", long_options, &option_index);
 #else
-    c = getopt(argc, argv, "vd:hp:o:Vf:c:C:D:");
+    c = getopt(argc, argv, "vd:hp:o:Vf:c:C:D:t");
 #endif
 
     if (c EQ - 1)
@@ -326,6 +328,11 @@ int main(int argc, char *argv[])
         fprintf(stderr, "ERR - Invalid video duration: %s (must be 10-3600 seconds)\n", optarg);
         return (EXIT_FAILURE);
       }
+      break;
+
+    case 't':
+      /* enable timestamp overlay */
+      config->show_timestamp = 1;
       break;
 
     default:
@@ -501,6 +508,7 @@ PRIVATE void print_help(void)
   fprintf(stderr, " -o|--output DIR        output directory for frames/video (default: plots)\n");
   fprintf(stderr, " -p|--period DURATION   time bin period (default: 1m)\n");
   fprintf(stderr, "                        examples: 1m, 5m, 15m, 30m, 60m, 120s, 1h\n");
+  fprintf(stderr, " -t|--timestamp         show timestamp overlay on frames\n");
   fprintf(stderr, " -v|--version           display version information\n");
   fprintf(stderr, " -V|--no-video          don't generate video (keep frames only)\n");
   fprintf(stderr, " filename               one or more files to process\n");
@@ -513,6 +521,7 @@ PRIVATE void print_help(void)
   fprintf(stderr, " -h            this info\n");
   fprintf(stderr, " -o {dir}      output directory for frames/video (default: plots)\n");
   fprintf(stderr, " -p {period}   time bin period (default: 1m)\n");
+  fprintf(stderr, " -t            show timestamp overlay on frames\n");
   fprintf(stderr, " -v            display version information\n");
   fprintf(stderr, " -V            don't generate video (keep frames only)\n");
   fprintf(stderr, " filename      one or more files to process\n");

@@ -48,6 +48,44 @@ PRIVATE uint8_t *cached_nonroutable_mask = NULL;
 PRIVATE uint8_t cached_mask_order = 0;
 PRIVATE uint32_t cached_mask_dimension = 0;
 
+/* Timestamp height in pixels */
+#define TIMESTAMP_HEIGHT 30
+#define TIMESTAMP_MARGIN 10
+
+/* Simple 5x7 bitmap font for timestamp rendering */
+/* Characters: 0-9, space, colon, dash */
+#define FONT_WIDTH  5
+#define FONT_HEIGHT 7
+
+PRIVATE const uint8_t font_5x7[13][7] = {
+    /* '0' */
+    {0x7C, 0xC6, 0xCE, 0xD6, 0xE6, 0xC6, 0x7C},
+    /* '1' */
+    {0x18, 0x38, 0x18, 0x18, 0x18, 0x18, 0x7E},
+    /* '2' */
+    {0x7C, 0xC6, 0x06, 0x0C, 0x30, 0x60, 0xFE},
+    /* '3' */
+    {0x7C, 0xC6, 0x06, 0x3C, 0x06, 0xC6, 0x7C},
+    /* '4' */
+    {0x0C, 0x1C, 0x3C, 0x6C, 0xCC, 0xFE, 0x0C},
+    /* '5' */
+    {0xFE, 0xC0, 0xFC, 0x06, 0x06, 0xC6, 0x7C},
+    /* '6' */
+    {0x38, 0x60, 0xC0, 0xFC, 0xC6, 0xC6, 0x7C},
+    /* '7' */
+    {0xFE, 0xC6, 0x0C, 0x18, 0x30, 0x30, 0x30},
+    /* '8' */
+    {0x7C, 0xC6, 0xC6, 0x7C, 0xC6, 0xC6, 0x7C},
+    /* '9' */
+    {0x7C, 0xC6, 0xC6, 0x7E, 0x06, 0x0C, 0x78},
+    /* ' ' (space) */
+    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+    /* ':' */
+    {0x00, 0x18, 0x18, 0x00, 0x18, 0x18, 0x00},
+    /* '-' */
+    {0x00, 0x00, 0x00, 0x7E, 0x00, 0x00, 0x00}
+};
+
 /****
  *
  * external variables
@@ -61,6 +99,126 @@ extern Config_t *config;
  * functions
  *
  ****/
+
+/****
+ *
+ * Get font character index
+ *
+ * DESCRIPTION:
+ *   Maps character to font bitmap index
+ *
+ * PARAMETERS:
+ *   c - Character to map
+ *
+ * RETURNS:
+ *   Font index (0-12), or 10 (space) if unknown
+ *
+ ****/
+PRIVATE int getFontIndex(char c)
+{
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    } else if (c == ' ') {
+        return 10;
+    } else if (c == ':') {
+        return 11;
+    } else if (c == '-') {
+        return 12;
+    }
+    return 10;  /* Default to space for unknown chars */
+}
+
+/****
+ *
+ * Draw character at position
+ *
+ * DESCRIPTION:
+ *   Renders single character from bitmap font to image buffer
+ *
+ * PARAMETERS:
+ *   image - RGB image buffer (3 bytes per pixel)
+ *   img_width - Image width in pixels
+ *   img_height - Image height in pixels
+ *   x - X position (left)
+ *   y - Y position (top)
+ *   c - Character to draw
+ *   r, g, b - RGB color values
+ *   scale - Character scale factor
+ *
+ * RETURNS:
+ *   void
+ *
+ ****/
+PRIVATE void drawChar(uint8_t *image, uint32_t img_width, uint32_t img_height,
+                      uint32_t x, uint32_t y, char c,
+                      uint8_t r, uint8_t g, uint8_t b, uint32_t scale)
+{
+    int font_idx = getFontIndex(c);
+    uint32_t cx, cy, sx, sy;
+    uint32_t pixel_offset;
+
+    for (cy = 0; cy < FONT_HEIGHT; cy++) {
+        uint8_t row = font_5x7[font_idx][cy];
+        for (cx = 0; cx < 8; cx++) {  /* Check all 8 bits */
+            if (row & (1 << (7 - cx))) {
+                /* Draw scaled pixel */
+                for (sy = 0; sy < scale; sy++) {
+                    for (sx = 0; sx < scale; sx++) {
+                        uint32_t px = x + cx * scale + sx;
+                        uint32_t py = y + cy * scale + sy;
+
+                        if (px < img_width && py < img_height) {
+                            pixel_offset = (py * img_width + px) * 3;
+                            image[pixel_offset] = r;
+                            image[pixel_offset + 1] = g;
+                            image[pixel_offset + 2] = b;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/****
+ *
+ * Draw timestamp text
+ *
+ * DESCRIPTION:
+ *   Renders timestamp string at bottom left of frame
+ *
+ * PARAMETERS:
+ *   image - RGB image buffer
+ *   img_width - Image width
+ *   img_height - Image height
+ *   timestamp - Time to display
+ *
+ * RETURNS:
+ *   void
+ *
+ ****/
+PRIVATE void drawTimestamp(uint8_t *image, uint32_t img_width, uint32_t img_height, time_t timestamp)
+{
+    char time_str[32];
+    struct tm *tm_info;
+    uint32_t x, i;
+    uint32_t scale = 2;  /* 2x scale for readability */
+    uint32_t char_spacing = (FONT_WIDTH + 2) * scale;
+
+    tm_info = localtime(&timestamp);
+    strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", tm_info);
+
+    /* Position at bottom left with margin */
+    x = TIMESTAMP_MARGIN;
+    uint32_t y = img_height - TIMESTAMP_HEIGHT + 5;
+
+    /* Draw each character */
+    for (i = 0; time_str[i] != '\0' && x + char_spacing < img_width; i++) {
+        drawChar(image, img_width, img_height, x, y, time_str[i],
+                255, 255, 255, scale);  /* White text */
+        x += char_spacing;
+    }
+}
 
 /****
  *
@@ -466,10 +624,29 @@ int writePPM(const char *filename, const TimeBin_t *bin, uint32_t width, uint32_
     RGB_t color;
     uint8_t *nonroutable_mask = NULL;
     int is_nonroutable;
+    uint8_t *image_buffer = NULL;
+    uint32_t actual_height = height;
+    uint32_t image_buffer_size;
 
     if (!filename || !bin || !bin->heatmap) {
         return FALSE;
     }
+
+    /* Add extra height for timestamp if enabled */
+    if (config->show_timestamp) {
+        actual_height = height + TIMESTAMP_HEIGHT;
+    }
+
+    /* Allocate image buffer */
+    image_buffer_size = actual_height * width * 3;  /* 3 bytes per pixel (RGB) */
+    image_buffer = (uint8_t *)XMALLOC((int)image_buffer_size);
+    if (!image_buffer) {
+        fprintf(stderr, "ERR - Failed to allocate image buffer\n");
+        return FALSE;
+    }
+
+    /* Initialize buffer to black */
+    memset(image_buffer, 0, image_buffer_size);
 
     /* Create mask for non-routable IP space */
     /* Calculate Hilbert order from dimension (dimension = 2^order) */
@@ -513,12 +690,13 @@ int writePPM(const char *filename, const TimeBin_t *bin, uint32_t width, uint32_
     fp = secure_fopen(filename, "wb");
     if (!fp) {
         fprintf(stderr, "ERR - Failed to open %s for writing\n", filename);
+        XFREE(image_buffer);
         /* Note: Do not free nonroutable_mask - it's cached */
         return FALSE;
     }
 
     /* Write PPM header (P6 = binary RGB) */
-    fprintf(fp, "P6\n%u %u\n255\n", width, height);
+    fprintf(fp, "P6\n%u %u\n255\n", width, actual_height);
 
     /* Render heatmap to 16:9 image with centered square */
     /* Calculate scaling and offset to center the square Hilbert curve */
@@ -540,9 +718,11 @@ int writePPM(const char *filename, const TimeBin_t *bin, uint32_t width, uint32_
     }
     scale = scale_x;
 
-    /* Write pixels row by row */
+    /* Render heatmap to buffer */
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++) {
+            uint32_t pixel_offset = (y * width + x) * 3;
+
             /* Check if we're in the Hilbert curve area */
             if (x >= offset_x && x < offset_x + (uint32_t)((float)bin->dimension * scale) &&
                 y >= offset_y && y < offset_y + (uint32_t)((float)bin->dimension * scale)) {
@@ -599,20 +779,34 @@ int writePPM(const char *filename, const TimeBin_t *bin, uint32_t width, uint32_
                 color.r = color.g = color.b = 0;
             }
 
-            /* Write RGB pixel */
-            fputc(color.r, fp);
-            fputc(color.g, fp);
-            fputc(color.b, fp);
+            /* Store RGB pixel in buffer */
+            image_buffer[pixel_offset] = color.r;
+            image_buffer[pixel_offset + 1] = color.g;
+            image_buffer[pixel_offset + 2] = color.b;
         }
     }
 
+    /* Add timestamp overlay if enabled */
+    if (config->show_timestamp) {
+        drawTimestamp(image_buffer, width, actual_height, bin->bin_start);
+    }
+
+    /* Write buffer to file */
+    if (fwrite(image_buffer, 1, image_buffer_size, fp) != image_buffer_size) {
+        fprintf(stderr, "ERR - Failed to write image data to %s\n", filename);
+        XFREE(image_buffer);
+        fclose(fp);
+        return FALSE;
+    }
+
     fclose(fp);
+    XFREE(image_buffer);
 
     /* Note: Do not free nonroutable_mask here - it's cached for reuse */
 
 #ifdef DEBUG
     if (config->debug >= 2) {
-        fprintf(stderr, "DEBUG - Wrote PPM: %s (%ux%u)\n", filename, width, height);
+        fprintf(stderr, "DEBUG - Wrote PPM: %s (%ux%u)\n", filename, width, actual_height);
     }
 #endif
 

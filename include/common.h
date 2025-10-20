@@ -147,6 +147,7 @@ typedef struct {
   const char *cidr_map_file;   /* Path to CIDR mapping file (default: cidr_map.txt) */
   uint32_t target_video_duration; /* Target video length in seconds (default: 300 = 5 min) */
   int auto_scale;              /* Auto-scale FPS and decay based on data span (default: 1) */
+  int show_timestamp;          /* Show timestamp overlay on frames (default: 0) */
 } Config_t;
 
 #endif	/* end of COMMON_H */

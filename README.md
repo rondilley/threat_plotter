@@ -38,7 +38,8 @@ This tool helps security analysts visualize attack patterns and threat data from
 - **Time binning**: Configurable time windows (1m, 5m, 30m, 1h)
 - **Decay visualization**: IPs fade over time (auto-scaled based on data span, default 3 hours for 1 day)
 - **Video generation**: Animated MP4 output using ffmpeg
-- **High resolution**: 3440×1440 (UWQHD) default output
+- **High resolution**: 4096×4096 square default output (matches Hilbert curve dimensions)
+- **Timestamp overlay**: Optional white timestamp at bottom of each frame for video reference
 
 ### Geographic Intelligence (Optional)
 - **GeoIP integration**: Optional MaxMind GeoLite2 database support
@@ -120,6 +121,9 @@ gcc -o cidr_mapper src/cidr_map.c -lmaxminddb
 # Enable debug output
 ./src/tplot -d 1 -p 5m logs/sensor.log.gz
 
+# With timestamp overlay for video reference
+./src/tplot -p 5m -t logs/sensor.log.gz
+
 # Process multiple files using the wrapper script
 # (processes N oldest files from logs/ directory)
 ./tplot.sh 7              # Process last 7 files with default settings
@@ -147,6 +151,7 @@ syntax: tplot [options] filename [filename ...]
  -o|--output DIR        output directory for frames/video (default: plots)
  -p|--period DURATION   time bin period (default: 1m)
                         examples: 1m, 5m, 15m, 30m, 60m, 120s, 1h
+ -t|--timestamp         show timestamp overlay on frames
  -v|--version           display version information
  -V|--no-video          don't generate video (keep frames only)
  filename               one or more files to process
@@ -175,7 +180,7 @@ Each frame shows a heatmap of attack sources over that time period, with CIDR bl
 ### Understanding the Visualization
 
 **Default Mode (Direct IP Mapping)**:
-- **Hilbert curve**: Square region in center of frame
+- **Hilbert curve**: Square visualization filling entire frame (4096×4096 by default)
 - **CIDR clustering**: Related IPs (same /8, /16, /24) appear as visual clusters
 - **Dark blue overlay**: Non-routable IP space (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, etc.)
 - **Dark grey residue**: Historical attack memory showing all coordinates that have been attacked across entire timeline
