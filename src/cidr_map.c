@@ -80,7 +80,18 @@ static uint32_t cidr_mapping_count = 0;
 static uint32_t cidr_mapping_capacity = 0;
 
 /****
- * Parse timezone from IANA name (simplified)
+ *
+ * Extract UTC offset from IANA timezone name
+ *
+ * DESCRIPTION:
+ *   Maps IANA timezone strings to UTC hour offsets using common timezone prefixes.
+ *
+ * PARAMETERS:
+ *   tz_name - IANA timezone string (e.g., "America/New_York")
+ *
+ * RETURNS:
+ *   UTC offset in hours (-12 to +14), or 0 (UTC) if unknown
+ *
  ****/
 int parseTimezoneOffset(const char *tz_name)
 {
@@ -112,7 +123,19 @@ int parseTimezoneOffset(const char *tz_name)
 }
 
 /****
- * Lookup timezone for IP address using MaxMind database
+ *
+ * Determine timezone for IP address via GeoIP
+ *
+ * DESCRIPTION:
+ *   Queries MaxMind database for IP location and extracts timezone. Falls back to
+ *   heuristic estimation if lookup fails.
+ *
+ * PARAMETERS:
+ *   ipv4 - IPv4 address in host byte order
+ *
+ * RETURNS:
+ *   UTC offset in hours (-12 to +14)
+ *
  ****/
 int lookupTimezone(uint32_t ipv4)
 {
@@ -148,7 +171,23 @@ int lookupTimezone(uint32_t ipv4)
 }
 
 /****
- * Add CIDR mapping entry
+ *
+ * Add CIDR block to mapping table
+ *
+ * DESCRIPTION:
+ *   Appends CIDR-to-timezone mapping to global array, growing array as needed.
+ *
+ * PARAMETERS:
+ *   network - Network address
+ *   prefix_len - CIDR prefix length
+ *   timezone_offset - UTC offset for this block
+ *
+ * RETURNS:
+ *   void
+ *
+ * SIDE EFFECTS:
+ *   May reallocate cidr_mappings array
+ *
  ****/
 void addCIDRMapping(uint32_t network, uint8_t prefix_len, int timezone_offset)
 {
@@ -169,7 +208,22 @@ void addCIDRMapping(uint32_t network, uint8_t prefix_len, int timezone_offset)
 }
 
 /****
- * Scan IPv4 address space and build timezone statistics
+ *
+ * Sample IPv4 space to build timezone distribution
+ *
+ * DESCRIPTION:
+ *   Samples every /16 block in routable IPv4 space, queries GeoIP timezone for each,
+ *   and accumulates block counts per timezone.
+ *
+ * PARAMETERS:
+ *   None
+ *
+ * RETURNS:
+ *   void
+ *
+ * SIDE EFFECTS:
+ *   Populates timezone_stats array and cidr_mappings
+ *
  ****/
 void scanIPv4Space(void)
 {
@@ -232,7 +286,22 @@ void scanIPv4Space(void)
 }
 
 /****
- * Calculate proportional X-axis allocation based on block density
+ *
+ * Compute X-axis allocation based on timezone density
+ *
+ * DESCRIPTION:
+ *   Allocates X coordinates proportionally to number of IP blocks in each timezone,
+ *   ensuring dense timezones get more horizontal space.
+ *
+ * PARAMETERS:
+ *   hilbert_dimension - Width of visualization space
+ *
+ * RETURNS:
+ *   void
+ *
+ * SIDE EFFECTS:
+ *   Sets x_start and x_end for each timezone in timezone_stats
+ *
  ****/
 void calculateProportionalAllocation(uint32_t hilbert_dimension)
 {
@@ -287,7 +356,23 @@ void calculateProportionalAllocation(uint32_t hilbert_dimension)
 }
 
 /****
- * Write mapping file
+ *
+ * Generate CIDR mapping output file
+ *
+ * DESCRIPTION:
+ *   Writes CIDR-to-coordinate mapping file with timezone allocation summary and
+ *   per-block mappings.
+ *
+ * PARAMETERS:
+ *   filename - Output file path
+ *   hilbert_dimension - Visualization dimension
+ *
+ * RETURNS:
+ *   void
+ *
+ * SIDE EFFECTS:
+ *   Creates mapping file on disk
+ *
  ****/
 void writeMappingFile(const char *filename, uint32_t hilbert_dimension)
 {

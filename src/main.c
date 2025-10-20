@@ -55,7 +55,22 @@ PUBLIC Config_t *config = NULL;
 /* errno and environ are provided by standard headers */
 
 /****
- * secure integer parsing with validation
+ *
+ * Parse integer from string with bounds checking
+ *
+ * DESCRIPTION:
+ *   Safely parses integer with validation for conversion errors, incomplete parsing,
+ *   and bounds violations.
+ *
+ * PARAMETERS:
+ *   str - String to parse
+ *   min_val - Minimum allowed value
+ *   max_val - Maximum allowed value
+ *   result - Output parameter for parsed value
+ *
+ * RETURNS:
+ *   TRUE on success, FALSE on error or out of range
+ *
  ****/
 PRIVATE int safe_parse_int(const char *str, int min_val, int max_val, int *result)
 {
@@ -89,8 +104,22 @@ PRIVATE int safe_parse_int(const char *str, int min_val, int max_val, int *resul
 }
 
 /****
- * validate file path for security
- * SECURITY: Uses realpath() to resolve symlinks and relative paths
+ *
+ * Validate file path against security policy
+ *
+ * DESCRIPTION:
+ *   Resolves path using realpath() to detect symlinks and relative paths, then
+ *   checks against blacklist of system directories.
+ *
+ * PARAMETERS:
+ *   path - File path to validate
+ *
+ * RETURNS:
+ *   TRUE if path is safe, FALSE if blacklisted or invalid
+ *
+ * SIDE EFFECTS:
+ *   Allocates temporary memory for path manipulation
+ *
  ****/
 PRIVATE int validate_file_path(const char *path)
 {
@@ -390,7 +419,16 @@ int main(int argc, char *argv[])
 
 /****
  *
- * display prog info
+ * Display program information and license
+ *
+ * DESCRIPTION:
+ *   Prints program name, version, author, and GPL license notice.
+ *
+ * PARAMETERS:
+ *   None
+ *
+ * RETURNS:
+ *   void
  *
  ****/
 
@@ -408,22 +446,40 @@ void show_info(void)
 }
 #endif
 
-/*****
+/****
  *
- * display version info
+ * Display version information
  *
- *****/
+ * DESCRIPTION:
+ *   Prints program name, version, and build date.
+ *
+ * PARAMETERS:
+ *   None
+ *
+ * RETURNS:
+ *   void
+ *
+ ****/
 
 PRIVATE void print_version(void)
 {
   printf("%s v%s [%s - %s]\n", PROGNAME, VERSION, __DATE__, __TIME__);
 }
 
-/*****
+/****
  *
- * print help info
+ * Display usage information
  *
- *****/
+ * DESCRIPTION:
+ *   Prints command-line syntax and option descriptions for all supported flags.
+ *
+ * PARAMETERS:
+ *   None
+ *
+ * RETURNS:
+ *   void
+ *
+ ****/
 
 PRIVATE void print_help(void)
 {
@@ -467,7 +523,19 @@ PRIVATE void print_help(void)
 
 /****
  *
- * cleanup
+ * Free allocated resources before exit
+ *
+ * DESCRIPTION:
+ *   Closes open files and frees allocated configuration memory.
+ *
+ * PARAMETERS:
+ *   None
+ *
+ * RETURNS:
+ *   void
+ *
+ * SIDE EFFECTS:
+ *   Frees config structure and closes output file
  *
  ****/
 

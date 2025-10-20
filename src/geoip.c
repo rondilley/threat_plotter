@@ -65,7 +65,21 @@ extern Config_t *config;
  ****/
 
 /****
- * Initialize GeoIP lookup system
+ *
+ * Initialize GeoIP lookup with MaxMind database
+ *
+ * DESCRIPTION:
+ *   Opens MaxMind GeoIP database and initializes lookup cache.
+ *
+ * PARAMETERS:
+ *   db_path - Path to MaxMind .mmdb file
+ *
+ * RETURNS:
+ *   TRUE on success, FALSE on error
+ *
+ * SIDE EFFECTS:
+ *   Allocates cache hash table and opens database file
+ *
  ****/
 int initGeoIP(const char *db_path)
 {
@@ -105,7 +119,21 @@ int initGeoIP(const char *db_path)
 }
 
 /****
- * Clean up GeoIP resources
+ *
+ * Release GeoIP resources
+ *
+ * DESCRIPTION:
+ *   Closes MaxMind database and frees cache memory.
+ *
+ * PARAMETERS:
+ *   None
+ *
+ * RETURNS:
+ *   void
+ *
+ * SIDE EFFECTS:
+ *   Frees cache and closes database file
+ *
  ****/
 void deInitGeoIP(void)
 {
@@ -130,7 +158,18 @@ void deInitGeoIP(void)
 }
 
 /****
- * Check if GeoIP is available
+ *
+ * Check if GeoIP system is initialized
+ *
+ * DESCRIPTION:
+ *   Returns initialization status of GeoIP system.
+ *
+ * PARAMETERS:
+ *   None
+ *
+ * RETURNS:
+ *   TRUE if initialized, FALSE otherwise
+ *
  ****/
 int isGeoIPAvailable(void)
 {
@@ -138,8 +177,19 @@ int isGeoIPAvailable(void)
 }
 
 /****
- * Parse timezone offset from IANA timezone name
- * This is a simplified approximation - real implementation would need full TZ database
+ *
+ * Convert IANA timezone to UTC offset
+ *
+ * DESCRIPTION:
+ *   Maps common IANA timezone names to UTC hour offsets. Simplified approximation
+ *   not accounting for DST or historical changes.
+ *
+ * PARAMETERS:
+ *   tz_name - IANA timezone string (e.g., "America/Chicago")
+ *
+ * RETURNS:
+ *   UTC offset in hours, or 0 if unknown
+ *
  ****/
 int parseTimezoneOffset(const char *tz_name)
 {
@@ -187,7 +237,22 @@ int parseTimezoneOffset(const char *tz_name)
 }
 
 /****
- * Lookup geographic location for IP address
+ *
+ * Get geographic location for IP address
+ *
+ * DESCRIPTION:
+ *   Queries MaxMind database for IP geolocation (country, coordinates, timezone).
+ *   Uses cache to avoid redundant lookups. Falls back to heuristics if lookup fails.
+ *
+ * PARAMETERS:
+ *   ipv4 - IPv4 address in host byte order
+ *
+ * RETURNS:
+ *   Pointer to GeoLocation structure (cached or fallback)
+ *
+ * SIDE EFFECTS:
+ *   May add entry to cache
+ *
  ****/
 GeoLocation_t *lookupGeoIP(uint32_t ipv4)
 {
@@ -302,7 +367,18 @@ GeoLocation_t *lookupGeoIP(uint32_t ipv4)
 }
 
 /****
- * Get timezone offset for IP address
+ *
+ * Determine timezone offset for IP address
+ *
+ * DESCRIPTION:
+ *   Looks up IP geolocation and extracts timezone offset.
+ *
+ * PARAMETERS:
+ *   ipv4 - IPv4 address in host byte order
+ *
+ * RETURNS:
+ *   UTC offset in hours, or 0 if lookup fails
+ *
  ****/
 int getTimezoneOffset(uint32_t ipv4)
 {
@@ -314,7 +390,18 @@ int getTimezoneOffset(uint32_t ipv4)
 }
 
 /****
- * Get timezone label for offset
+ *
+ * Format timezone offset as string
+ *
+ * DESCRIPTION:
+ *   Converts timezone hour offset to "UTC+N" format string.
+ *
+ * PARAMETERS:
+ *   offset - UTC offset in hours
+ *
+ * RETURNS:
+ *   Static string containing formatted timezone
+ *
  ****/
 const char *getTimezoneLabel(int offset)
 {
@@ -327,8 +414,19 @@ const char *getTimezoneLabel(int offset)
 }
 
 /****
- * Fallback GeoIP when database not available or lookup fails
- * Uses simple heuristics based on IP address ranges
+ *
+ * Provide fallback geolocation when database unavailable
+ *
+ * DESCRIPTION:
+ *   Returns basic GeoLocation with heuristic timezone estimate when database
+ *   lookup fails.
+ *
+ * PARAMETERS:
+ *   ipv4 - IPv4 address in host byte order
+ *
+ * RETURNS:
+ *   Pointer to static fallback GeoLocation structure
+ *
  ****/
 GeoLocation_t *fallbackGeoIP(uint32_t ipv4)
 {
@@ -348,8 +446,19 @@ GeoLocation_t *fallbackGeoIP(uint32_t ipv4)
 }
 
 /****
- * Fallback timezone estimation from IP address structure
- * Very rough approximation based on RIR allocations
+ *
+ * Estimate timezone from IP address heuristics
+ *
+ * DESCRIPTION:
+ *   Provides rough timezone guess based on first octet distribution across RIRs.
+ *   Very approximate - should only be used when GeoIP database unavailable.
+ *
+ * PARAMETERS:
+ *   ipv4 - IPv4 address in host byte order
+ *
+ * RETURNS:
+ *   UTC offset in hours (rough estimate)
+ *
  ****/
 int fallbackTimezoneFromIP(uint32_t ipv4)
 {
@@ -373,7 +482,21 @@ int fallbackTimezoneFromIP(uint32_t ipv4)
 }
 
 /****
- * Clear GeoIP cache
+ *
+ * Reset GeoIP lookup cache
+ *
+ * DESCRIPTION:
+ *   Clears all cached GeoIP lookups and resets statistics.
+ *
+ * PARAMETERS:
+ *   None
+ *
+ * RETURNS:
+ *   void
+ *
+ * SIDE EFFECTS:
+ *   Frees and reallocates cache hash table
+ *
  ****/
 void clearGeoIPCache(void)
 {
@@ -386,7 +509,18 @@ void clearGeoIPCache(void)
 }
 
 /****
- * Print cache statistics
+ *
+ * Display GeoIP cache performance metrics
+ *
+ * DESCRIPTION:
+ *   Prints cache hit rate, lookup success rate, and entry count.
+ *
+ * PARAMETERS:
+ *   None
+ *
+ * RETURNS:
+ *   void
+ *
  ****/
 void printGeoIPCacheStats(void)
 {
@@ -406,7 +540,20 @@ void printGeoIPCacheStats(void)
 }
 
 /****
- * Format IP address as string
+ *
+ * Convert IP address to dotted-decimal string
+ *
+ * DESCRIPTION:
+ *   Formats IPv4 address as "A.B.C.D" string.
+ *
+ * PARAMETERS:
+ *   ipv4 - IPv4 address in host byte order
+ *   buf - Output buffer
+ *   buf_size - Size of output buffer
+ *
+ * RETURNS:
+ *   void
+ *
  ****/
 void formatIPAddress(uint32_t ipv4, char *buf, size_t buf_size)
 {

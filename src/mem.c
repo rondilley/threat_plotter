@@ -253,7 +253,20 @@ void *xmalloc_(const int size, const char *filename, const int linenumber)
 
 /****
  *
- * copy from one place to another
+ * Safe memory copy with overlap detection
+ *
+ * DESCRIPTION:
+ *   Wrapper around memcpy/memmove with debug tracking and overlap detection.
+ *
+ * PARAMETERS:
+ *   d_ptr - Destination pointer
+ *   s_ptr - Source pointer
+ *   size - Bytes to copy
+ *   filename - Source file (debug)
+ *   linenumber - Line number (debug)
+ *
+ * RETURNS:
+ *   Destination pointer
  *
  ****/
 
@@ -396,7 +409,21 @@ void *xmemcpy_(void *d_ptr, const void *s_ptr, const int size, const char *filen
 
 /****
  *
- * copy from one place to another
+ * Bounded memory copy with overlap detection
+ *
+ * DESCRIPTION:
+ *   Wrapper around memcpy/memmove with size limit and overlap detection.
+ *
+ * PARAMETERS:
+ *   d_ptr - Destination pointer
+ *   s_ptr - Source pointer
+ *   len - Maximum length (unused)
+ *   size - Actual bytes to copy
+ *   filename - Source file (debug)
+ *   linenumber - Line number (debug)
+ *
+ * RETURNS:
+ *   Destination pointer
  *
  ****/
 
@@ -539,7 +566,20 @@ char *xmemncpy_(char *d_ptr, const char *s_ptr, const size_t len __attribute__((
 
 /****
  *
- * set memory area
+ * Set memory to value
+ *
+ * DESCRIPTION:
+ *   Wrapper around memset/bzero with debug tracking.
+ *
+ * PARAMETERS:
+ *   ptr - Memory pointer
+ *   value - Byte value to set
+ *   size - Number of bytes
+ *   filename - Source file (debug)
+ *   linenumber - Line number (debug)
+ *
+ * RETURNS:
+ *   Memory pointer
  *
  ****/
 
@@ -576,7 +616,20 @@ void *xmemset_(void *ptr, const char value, const int size,
 
 /****
  *
- * compare memory
+ * Compare memory regions
+ *
+ * DESCRIPTION:
+ *   Wrapper around memcmp with debug tracking.
+ *
+ * PARAMETERS:
+ *   s1 - First memory region
+ *   s2 - Second memory region
+ *   n - Number of bytes to compare
+ *   filename - Source file (debug)
+ *   linenumber - Line number (debug)
+ *
+ * RETURNS:
+ *   0 if equal, <0 if s1<s2, >0 if s1>s2
  *
  ****/
 
@@ -605,8 +658,19 @@ int xmemcmp_(const void *s1, const void *s2, size_t n,
 
 /****
  *
- * Allocate memory. Checks the return value, aborts if no more memory is
- *available
+ * Reallocate memory with debug tracking
+ *
+ * DESCRIPTION:
+ *   Wrapper around realloc with allocation tracking and error handling.
+ *
+ * PARAMETERS:
+ *   ptr - Existing pointer (NULL for new allocation)
+ *   size - New size in bytes
+ *   filename - Source file (debug)
+ *   linenumber - Line number (debug)
+ *
+ * RETURNS:
+ *   Pointer to reallocated memory
  *
  ****/
 
@@ -715,8 +779,15 @@ void *xrealloc_(void *ptr, int size, const char *filename, const int linenumber)
 
 /****
  *
- * Free memory. Merely a wrapper for the case that we want to keep track of
- *allocations.
+ * Free memory with debug tracking
+ *
+ * DESCRIPTION:
+ *   Wrapper around free with allocation tracking and validation.
+ *
+ * PARAMETERS:
+ *   ptr - Pointer to free
+ *   filename - Source file (debug)
+ *   linenumber - Line number (debug)
  *
  ****/
 
@@ -791,7 +862,14 @@ void xfree_(void *ptr, const char *filename, const int linenumber)
 
 /****
  *
- * free all known buffers
+ * Free all tracked allocations
+ *
+ * DESCRIPTION:
+ *   Frees all memory tracked in debug list. Used for cleanup and leak detection.
+ *
+ * PARAMETERS:
+ *   filename - Source file (debug)
+ *   linenumber - Line number (debug)
  *
  ****/
 
@@ -831,7 +909,18 @@ void xfree_all_(const char *filename, const int linenumber)
 
 /****
  *
- * Dup a string
+ * Duplicate string with debug tracking
+ *
+ * DESCRIPTION:
+ *   Wrapper around strdup with allocation tracking.
+ *
+ * PARAMETERS:
+ *   str - String to duplicate
+ *   filename - Source file (debug)
+ *   linenumber - Line number (debug)
+ *
+ * RETURNS:
+ *   Pointer to duplicated string
  *
  ****/
 
@@ -851,7 +940,18 @@ char *xstrdup_(const char *str, const char *filename __attribute__((unused)),
 
 /****
  *
- * grow or shrink an array
+ * Grow or shrink array
+ *
+ * DESCRIPTION:
+ *   Reallocates array to new size, copying existing elements.
+ *
+ * PARAMETERS:
+ *   old - Pointer to old array pointer
+ *   elementSize - Size of each element
+ *   oldCount - Pointer to old element count
+ *   newCount - New element count
+ *   filename - Source file (debug)
+ *   linenumber - Line number (debug)
  *
  ****/
 
@@ -898,7 +998,19 @@ void xgrow_(void **old, int elementSize, int *oldCount, int newCount,
 
 /****
  *
- * wraper around strcpy
+ * Safe string copy with overlap detection
+ *
+ * DESCRIPTION:
+ *   Wrapper around strcpy with bounds checking and overlap detection.
+ *
+ * PARAMETERS:
+ *   d_ptr - Destination buffer
+ *   s_ptr - Source string
+ *   filename - Source file (debug)
+ *   linenumber - Line number (debug)
+ *
+ * RETURNS:
+ *   Destination pointer
  *
  ****/
 
@@ -1051,7 +1163,20 @@ char *xstrcpy_(char *d_ptr, const char *s_ptr, const char *filename, const int l
 
 /****
  *
- * wraper around strncpy
+ * Bounded string copy with validation
+ *
+ * DESCRIPTION:
+ *   Wrapper around strncpy with bounds checking.
+ *
+ * PARAMETERS:
+ *   d_ptr - Destination buffer
+ *   s_ptr - Source string
+ *   len - Maximum length
+ *   filename - Source file (debug)
+ *   linenumber - Line number (debug)
+ *
+ * RETURNS:
+ *   Destination pointer
  *
  ****/
 

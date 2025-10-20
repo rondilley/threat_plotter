@@ -56,7 +56,19 @@ extern Config_t *config;
 
 /****
  *
- * empty binary tree
+ * Recursively destroy binary tree
+ *
+ * DESCRIPTION:
+ *   Frees all nodes and values in binary tree using post-order traversal.
+ *
+ * PARAMETERS:
+ *   node - Root node of tree to destroy
+ *
+ * RETURNS:
+ *   void
+ *
+ * SIDE EFFECTS:
+ *   Frees all allocated memory for tree nodes and string values
  *
  ****/
 
@@ -73,7 +85,21 @@ inline void destroyBinTree(struct binTree_s *node)
 
 /****
  *
- * insert record into binary tree
+ * Insert string value into binary tree
+ *
+ * DESCRIPTION:
+ *   Inserts value into sorted binary tree. Creates new node if position is empty,
+ *   otherwise recursively traverses left (smaller) or right (larger) subtree.
+ *
+ * PARAMETERS:
+ *   node - Pointer to node pointer (allows modification)
+ *   value - String value to insert
+ *
+ * RETURNS:
+ *   void
+ *
+ * SIDE EFFECTS:
+ *   Allocates memory for new node and value copy
  *
  ****/
 
@@ -95,7 +121,17 @@ inline void insertBinTree(struct binTree_s **node, char *value)
 
 /****
  *
- * search for value in binary tree
+ * Search for string value in binary tree
+ *
+ * DESCRIPTION:
+ *   Recursively searches sorted binary tree for exact string match.
+ *
+ * PARAMETERS:
+ *   node - Root node to start search
+ *   value - String value to find
+ *
+ * RETURNS:
+ *   Pointer to node containing value, or NULL if not found
  *
  ****/
 

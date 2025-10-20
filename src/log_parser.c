@@ -57,7 +57,15 @@ extern Config_t *config;
  ****/
 
 /****
+ *
  * Initialize log parser
+ *
+ * DESCRIPTION:
+ *   Sets parser initialization flag. Idempotent (safe to call multiple times).
+ *
+ * RETURNS:
+ *   TRUE
+ *
  ****/
 int initLogParser(void)
 {
@@ -77,7 +85,12 @@ int initLogParser(void)
 }
 
 /****
+ *
  * Deinitialize log parser
+ *
+ * DESCRIPTION:
+ *   Clears parser initialization flag.
+ *
  ****/
 void deInitLogParser(void)
 {
@@ -91,9 +104,18 @@ void deInitLogParser(void)
 }
 
 /****
- * Convert IP string to 32-bit integer (network byte order)
  *
- * PERFORMANCE: ~50ns per call (uses inet_addr internally)
+ * Convert IP string to 32-bit integer
+ *
+ * DESCRIPTION:
+ *   Parses dotted-decimal IP string to network byte order uint32_t.
+ *
+ * PARAMETERS:
+ *   ip_str - IP address string (e.g., "192.168.1.1")
+ *
+ * RETURNS:
+ *   IP as uint32_t (network byte order), or 0 if invalid
+ *
  ****/
 uint32_t ipStringToInt(const char *ip_str)
 {
@@ -107,7 +129,17 @@ uint32_t ipStringToInt(const char *ip_str)
 }
 
 /****
+ *
  * Convert 32-bit IP integer to string
+ *
+ * DESCRIPTION:
+ *   Converts network byte order IP to dotted-decimal string.
+ *
+ * PARAMETERS:
+ *   ip - IP as uint32_t (network byte order)
+ *   buf - Output buffer
+ *   buf_size - Buffer size
+ *
  ****/
 void ipIntToString(uint32_t ip, char *buf, size_t buf_size)
 {
@@ -122,9 +154,18 @@ void ipIntToString(uint32_t ip, char *buf, size_t buf_size)
 }
 
 /****
- * Find "PacketTime:" field in log line
  *
- * PERFORMANCE: ~20ns per call (simple strstr)
+ * Find PacketTime field in log line
+ *
+ * DESCRIPTION:
+ *   Searches for "PacketTime:" substring.
+ *
+ * PARAMETERS:
+ *   line - Log line to search
+ *
+ * RETURNS:
+ *   Pointer to "PacketTime:" or NULL if not found
+ *
  ****/
 const char *findPacketTime(const char *line)
 {
@@ -132,9 +173,18 @@ const char *findPacketTime(const char *line)
 }
 
 /****
- * Find "IPv4/TCP" or "IPv4/UDP" field in log line
  *
- * PERFORMANCE: ~30ns per call
+ * Find IPv4 protocol field in log line
+ *
+ * DESCRIPTION:
+ *   Searches for "IPv4/" substring (TCP or UDP follows).
+ *
+ * PARAMETERS:
+ *   line - Log line to search
+ *
+ * RETURNS:
+ *   Pointer to "IPv4/" or NULL if not found
+ *
  ****/
 const char *findIPv4Protocol(const char *line)
 {
@@ -147,11 +197,20 @@ const char *findIPv4Protocol(const char *line)
 }
 
 /****
+ *
  * Parse timestamp from PacketTime field
  *
- * Format: PacketTime:2019-02-22 17:26:39.092449
+ * DESCRIPTION:
+ *   Parses "PacketTime:YYYY-MM-DD HH:MM:SS.microseconds" format.
  *
- * PERFORMANCE: ~200ns per call
+ * PARAMETERS:
+ *   time_str - Timestamp string (with or without "PacketTime:" prefix)
+ *   timestamp - Output Unix timestamp
+ *   microseconds - Output microseconds
+ *
+ * RETURNS:
+ *   TRUE on success, FALSE on parse failure
+ *
  ****/
 int parseTimestamp(const char *time_str, time_t *timestamp, uint32_t *microseconds)
 {
@@ -199,11 +258,21 @@ int parseTimestamp(const char *time_str, time_t *timestamp, uint32_t *microsecon
 }
 
 /****
+ *
  * Extract IP:port from string
  *
- * Format: "45.55.247.43:35398"
+ * DESCRIPTION:
+ *   Parses "IP:port" format (e.g., "192.168.1.1:8080").
  *
- * PERFORMANCE: ~100ns per call
+ * PARAMETERS:
+ *   str - String containing IP:port
+ *   ip_buf - Output buffer for IP string
+ *   ip_buf_size - Buffer size
+ *   port - Output port number
+ *
+ * RETURNS:
+ *   TRUE on success, FALSE on parse failure
+ *
  ****/
 int extractIPPort(const char *str, char *ip_buf, int ip_buf_size, uint16_t *port)
 {
@@ -254,12 +323,19 @@ int extractIPPort(const char *str, char *ip_buf, int ip_buf_size, uint16_t *port
 }
 
 /****
+ *
  * Parse honeypot sensor log line
  *
- * Format: Feb 22 09:26:39 10.10.10.40 honeypi00 sensor: PacketTime:2019-02-22 17:26:39.092449
- *         Len:60 IPv4/TCP 45.55.247.43:35398 -> 10.10.10.40:5900 ...
+ * DESCRIPTION:
+ *   Parses syslog honeypot format. Extracts timestamp, IPs, ports, protocol.
  *
- * PERFORMANCE: ~500ns per line (optimized for speed)
+ * PARAMETERS:
+ *   line - Log line to parse
+ *   event - Output HoneypotEvent_t structure
+ *
+ * RETURNS:
+ *   TRUE on success, FALSE if line doesn't match format
+ *
  ****/
 int parseHoneypotLine(const char *line, HoneypotEvent_t *event)
 {
@@ -402,9 +478,18 @@ int parseHoneypotLine(const char *line, HoneypotEvent_t *event)
 }
 
 /****
+ *
  * Open gzip compressed file for streaming
  *
- * PERFORMANCE: O(1) - just opens file handle
+ * DESCRIPTION:
+ *   Opens .gz file for line-by-line reading. Allocates GzipStream_t structure.
+ *
+ * PARAMETERS:
+ *   file_path - Path to .gz file
+ *
+ * RETURNS:
+ *   Pointer to GzipStream_t on success, NULL on failure
+ *
  ****/
 GzipStream_t *openGzipStream(const char *file_path)
 {
@@ -456,7 +541,15 @@ GzipStream_t *openGzipStream(const char *file_path)
 }
 
 /****
- * Close gzip stream
+ *
+ * Close gzip stream and free resources
+ *
+ * DESCRIPTION:
+ *   Closes gzip file, frees buffers and stream structure.
+ *
+ * PARAMETERS:
+ *   stream - GzipStream_t to close (NULL-safe)
+ *
  ****/
 void closeGzipStream(GzipStream_t *stream)
 {
@@ -480,9 +573,20 @@ void closeGzipStream(GzipStream_t *stream)
 }
 
 /****
+ *
  * Read one line from gzip stream
  *
- * PERFORMANCE: ~2-3μs per line (with decompression)
+ * DESCRIPTION:
+ *   Reads next line from compressed file. Updates line count and byte statistics.
+ *
+ * PARAMETERS:
+ *   stream - GzipStream_t handle
+ *   line_buf - Output buffer for line
+ *   buf_size - Buffer size
+ *
+ * RETURNS:
+ *   TRUE if line read, FALSE on EOF or error
+ *
  ****/
 int readLineGzip(GzipStream_t *stream, char *line_buf, size_t buf_size)
 {
@@ -508,7 +612,15 @@ int readLineGzip(GzipStream_t *stream, char *line_buf, size_t buf_size)
 }
 
 /****
+ *
  * Reset parser statistics
+ *
+ * DESCRIPTION:
+ *   Zeros ParserStats_t structure.
+ *
+ * PARAMETERS:
+ *   stats - ParserStats_t to reset (NULL-safe)
+ *
  ****/
 void resetParserStats(ParserStats_t *stats)
 {
@@ -520,7 +632,15 @@ void resetParserStats(ParserStats_t *stats)
 }
 
 /****
- * Print parser statistics
+ *
+ * Print parser statistics to stderr
+ *
+ * DESCRIPTION:
+ *   Displays lines processed, parse rate, throughput, success rate.
+ *
+ * PARAMETERS:
+ *   stats - ParserStats_t to print (NULL-safe)
+ *
  ****/
 void printParserStats(const ParserStats_t *stats)
 {
@@ -552,13 +672,21 @@ void printParserStats(const ParserStats_t *stats)
 }
 
 /****
- * Process entire gzip file with callback
  *
- * This is the main high-speed processing function.
- * It reads and parses the file line-by-line, calling the
- * provided callback for each successfully parsed event.
+ * Process entire gzip log file with event callback
  *
- * PERFORMANCE: Processes ~500K lines/sec with gzip decompression
+ * DESCRIPTION:
+ *   Main processing loop. Reads/parses lines, calls callback for each event.
+ *   Tracks timing and statistics. Prints progress every 1M lines.
+ *
+ * PARAMETERS:
+ *   file_path - Path to .gz log file
+ *   event_callback - Function called for each parsed event (return FALSE to stop)
+ *   user_data - Opaque pointer passed to callback
+ *
+ * RETURNS:
+ *   TRUE on success, FALSE on error or callback abort
+ *
  ****/
 int processGzipFile(const char *file_path,
                     int (*event_callback)(const HoneypotEvent_t *event, void *user_data),

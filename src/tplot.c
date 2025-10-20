@@ -28,6 +28,7 @@
 
 #include "tplot.h"
 #include <sys/wait.h>  /* For waitpid() */
+#include <glob.h>      /* For glob() */
 
 /****
  *
@@ -78,8 +79,18 @@ extern int reload;
 /* secure_fopen() is now in util.c */
 
 /****
+ *
  * Validate video codec against whitelist
- * SECURITY: Prevents command injection via codec parameter
+ *
+ * DESCRIPTION:
+ *   Checks codec name against allowed list. Prevents command injection.
+ *
+ * PARAMETERS:
+ *   codec - Codec name to validate
+ *
+ * RETURNS:
+ *   TRUE if codec is in whitelist, FALSE otherwise
+ *
  ****/
 PRIVATE int isValidCodec(const char *codec)
 {
@@ -116,8 +127,82 @@ PRIVATE int isValidCodec(const char *codec)
 }
 
 /****
- * Execute ffmpeg safely without shell interpretation
- * SECURITY: Uses fork/execvp to avoid command injection
+ *
+ * Delete PPM frame files after video generation
+ *
+ * DESCRIPTION:
+ *   Removes all frame_*.ppm files from output directory to save disk space.
+ *   Uses glob() to find matching files, only called after successful video creation.
+ *
+ * PARAMETERS:
+ *   output_dir - Directory containing frame files
+ *
+ * RETURNS:
+ *   Number of files deleted, or -1 on error
+ *
+ ****/
+PRIVATE int cleanup_frame_files(const char *output_dir)
+{
+  char pattern[PATH_MAX];
+  int deleted_count = 0;
+
+  /* Build glob pattern for frame files */
+  snprintf(pattern, sizeof(pattern), "%s/frame_*.ppm", output_dir);
+
+  /* Use glob to find all matching files */
+  glob_t glob_result;
+  memset(&glob_result, 0, sizeof(glob_result));
+
+  int ret = glob(pattern, GLOB_NOSORT, NULL, &glob_result);
+
+  if (ret == 0) {
+    /* Delete each file */
+    for (size_t i = 0; i < glob_result.gl_pathc; i++) {
+      if (unlink(glob_result.gl_pathv[i]) == 0) {
+        deleted_count++;
+#ifdef DEBUG
+        if (config->debug >= 3) {
+          fprintf(stderr, "DEBUG - Deleted frame file: %s\n", glob_result.gl_pathv[i]);
+        }
+#endif
+      } else {
+        fprintf(stderr, "WARN - Failed to delete frame file: %s (%s)\n",
+                glob_result.gl_pathv[i], strerror(errno));
+      }
+    }
+    globfree(&glob_result);
+  } else if (ret == GLOB_NOMATCH) {
+    /* No files found - not an error */
+    return 0;
+  } else {
+    fprintf(stderr, "WARN - Failed to glob frame files: %s\n", pattern);
+    return -1;
+  }
+
+  if (deleted_count > 0) {
+    fprintf(stderr, "Cleaned up %d frame files\n", deleted_count);
+  }
+
+  return deleted_count;
+}
+
+/****
+ *
+ * Execute ffmpeg to generate video from frames
+ *
+ * DESCRIPTION:
+ *   Safely executes ffmpeg using fork/execvp to avoid shell injection.
+ *   Validates codec, builds arguments, and waits for completion.
+ *
+ * PARAMETERS:
+ *   output_dir - Directory containing frame files
+ *   codec - Video codec (validated against whitelist)
+ *   fps - Frames per second
+ *   output_path - Output video file path
+ *
+ * RETURNS:
+ *   0 on success, -1 or ffmpeg exit code on failure
+ *
  ****/
 PRIVATE int execute_ffmpeg(const char *output_dir, const char *codec,
                            uint32_t fps, const char *output_path)
@@ -203,7 +288,18 @@ PRIVATE int execute_ffmpeg(const char *output_dir, const char *codec,
 
 /****
  *
- * honeypot event callback for log parser
+ * Process honeypot log events
+ *
+ * DESCRIPTION:
+ *   Callback for log parser. Maps IP to Hilbert coordinates, tracks time span,
+ *   processes events into bins, renders frames when bins complete, applies decay.
+ *
+ * PARAMETERS:
+ *   event - Honeypot event data (src IP, timestamp, etc.)
+ *   user_data - CallbackData_t with bin manager and config
+ *
+ * RETURNS:
+ *   TRUE to continue processing, FALSE to stop
  *
  ****/
 PRIVATE int honeypotEventCallback(const HoneypotEvent_t *event, void *user_data)
@@ -293,7 +389,17 @@ PRIVATE int honeypotEventCallback(const HoneypotEvent_t *event, void *user_data)
 
 /****
  *
- * process honeypot log file (gzip compressed)
+ * Process single honeypot log file
+ *
+ * DESCRIPTION:
+ *   Complete pipeline for single-file processing. Initializes all subsystems,
+ *   processes log file, renders frames, generates video, cleans up.
+ *
+ * PARAMETERS:
+ *   fName - Path to gzip compressed log file
+ *
+ * RETURNS:
+ *   EXIT_SUCCESS or EXIT_FAILURE
  *
  ****/
 int processHoneypotFile(const char *fName)
@@ -441,9 +547,13 @@ int processHoneypotFile(const char *fName)
 
     if (ret == 0) {
       fprintf(stderr, "Video created successfully: %s\n", video_path);
+
+      /* Clean up frame files after successful video generation */
+      cleanup_frame_files(viz_config.output_dir);
     } else {
       fprintf(stderr, "WARNING - ffmpeg returned exit code: %d\n", ret);
       fprintf(stderr, "Video may still have been created. Check: %s\n", video_path);
+      fprintf(stderr, "Frame files retained for inspection\n");
     }
   }
 
@@ -463,7 +573,16 @@ int processHoneypotFile(const char *fName)
  ****/
 
 /****
- * Initialize processing for multiple files
+ *
+ * Initialize multi-file processing pipeline
+ *
+ * DESCRIPTION:
+ *   Sets up subsystems for processing multiple log files into single timeline.
+ *   Creates output directory, initializes Hilbert/visualization/parser, loads CIDR map.
+ *
+ * RETURNS:
+ *   EXIT_SUCCESS or EXIT_FAILURE
+ *
  ****/
 int initProcessing(void)
 {
@@ -557,7 +676,19 @@ int initProcessing(void)
 }
 
 /****
- * Process a single file into the timeline
+ *
+ * Process single file into existing timeline
+ *
+ * DESCRIPTION:
+ *   Processes one log file and adds events to global timeline.
+ *   Must be called after initProcessing(). Can be called multiple times.
+ *
+ * PARAMETERS:
+ *   fName - Path to gzip log file
+ *
+ * RETURNS:
+ *   EXIT_SUCCESS or EXIT_FAILURE
+ *
  ****/
 int processFileIntoTimeline(const char *fName)
 {
@@ -578,7 +709,16 @@ int processFileIntoTimeline(const char *fName)
 }
 
 /****
- * Finalize processing and generate video
+ *
+ * Finalize multi-file processing and generate video
+ *
+ * DESCRIPTION:
+ *   Completes timeline processing, auto-scales FPS/decay based on data span,
+ *   renders final frame, generates video, cleans up subsystems.
+ *
+ * RETURNS:
+ *   EXIT_SUCCESS or EXIT_FAILURE
+ *
  ****/
 int finalizeProcessing(void)
 {
@@ -681,9 +821,13 @@ int finalizeProcessing(void)
 
     if (ret == 0) {
       fprintf(stderr, "Video created successfully: %s\n", video_path);
+
+      /* Clean up frame files after successful video generation */
+      cleanup_frame_files(g_viz_config.output_dir);
     } else {
       fprintf(stderr, "WARNING - ffmpeg returned exit code: %d\n", ret);
       fprintf(stderr, "Video may still have been created. Check: %s\n", video_path);
+      fprintf(stderr, "Frame files retained for inspection\n");
     }
   }
 

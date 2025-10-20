@@ -60,7 +60,20 @@ extern Config_t *config;
 
 /****
  *
- * add template to match list
+ * Add template string to match list
+ *
+ * DESCRIPTION:
+ *   Adds template to linked list for pattern matching. Template is copied and
+ *   appended to end of list.
+ *
+ * PARAMETERS:
+ *   template - Template string to add (printf-style format)
+ *
+ * RETURNS:
+ *   TRUE on success, FALSE if template too long or allocation fails
+ *
+ * SIDE EFFECTS:
+ *   Allocates memory for new list node and template copy
  *
  ****/
 
@@ -97,7 +110,20 @@ int addMatchTemplate(char *template)
 
 /****
  *
- * load match templates from file
+ * Load match templates from file
+ *
+ * DESCRIPTION:
+ *   Reads file containing one template per line. Lines starting with # are
+ *   ignored as comments. Each template is added to the match list.
+ *
+ * PARAMETERS:
+ *   fName - Path to template file
+ *
+ * RETURNS:
+ *   EXIT_SUCCESS on success, FAILED on error
+ *
+ * SIDE EFFECTS:
+ *   Populates global matchTemplates list
  *
  ****/
 
@@ -170,7 +196,16 @@ int loadMatchTemplates(char *fName)
 
 /****
  *
- * convert log line to template and add to match list
+ * Parse log line and add generated template to match list
+ *
+ * DESCRIPTION:
+ *   Parses log line to extract template pattern, then adds to match list.
+ *
+ * PARAMETERS:
+ *   line - Log line to parse
+ *
+ * RETURNS:
+ *   TRUE if successfully parsed and added, FALSE on parse failure
  *
  ****/
 
@@ -190,7 +225,17 @@ int addMatchLine(char *line)
 
 /****
  *
- * load match lines from file and convert to templates
+ * Load log lines from file and convert to templates
+ *
+ * DESCRIPTION:
+ *   Reads file containing example log lines (one per line). Each line is parsed
+ *   to generate a template pattern which is added to the match list.
+ *
+ * PARAMETERS:
+ *   fName - Path to file containing example log lines
+ *
+ * RETURNS:
+ *   TRUE on success, FAILED on error
  *
  ****/
 
@@ -249,7 +294,17 @@ int loadMatchLines(char *fName)
 
 /****
  *
- * test for match
+ * Check if template matches any loaded template
+ *
+ * DESCRIPTION:
+ *   Searches match list for exact template match using character-by-character
+ *   comparison.
+ *
+ * PARAMETERS:
+ *   template - Template string to search for
+ *
+ * RETURNS:
+ *   TRUE if match found, FALSE otherwise
  *
  ****/
 
@@ -285,7 +340,19 @@ int templateMatches(char *template)
 
 /****
  *
- * cleanup match list
+ * Free all match templates
+ *
+ * DESCRIPTION:
+ *   Traverses match list and frees all allocated memory for templates and nodes.
+ *
+ * PARAMETERS:
+ *   None
+ *
+ * RETURNS:
+ *   void
+ *
+ * SIDE EFFECTS:
+ *   Frees global matchTemplates list
  *
  ****/
 

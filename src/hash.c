@@ -199,7 +199,19 @@ struct hash_s *initHash(uint32_t hashSize)
 
 /****
  *
- * empty the hash table
+ * Free all hash table memory
+ *
+ * DESCRIPTION:
+ *   Recursively frees all hash records, lists, and hash structure.
+ *
+ * PARAMETERS:
+ *   hash - Hash table to destroy
+ *
+ * RETURNS:
+ *   void
+ *
+ * SIDE EFFECTS:
+ *   Frees all allocated memory for hash and contents
  *
  ****/
 
@@ -244,7 +256,17 @@ void freeHash(struct hash_s *hash)
 
 /****
  *
- * traverse all hash records, calling func() for each one
+ * Apply function to all hash records
+ *
+ * DESCRIPTION:
+ *   Iterates through all hash records and calls provided function for each.
+ *
+ * PARAMETERS:
+ *   hash - Hash table to traverse
+ *   fn - Function to call for each record
+ *
+ * RETURNS:
+ *   TRUE on success, FAILED if any function call returns non-zero
  *
  ****/
 
@@ -277,7 +299,23 @@ int traverseHash(const struct hash_s *hash, int (*fn)(const struct hashRec_s *ha
 
 /****
  *
- * add a unique record to the hash
+ * Create and add new hash record
+ *
+ * DESCRIPTION:
+ *   Adds new record to hash using binary search insertion to maintain sorted order
+ *   within collision lists. Returns NULL if key already exists.
+ *
+ * PARAMETERS:
+ *   hash - Hash table
+ *   keyString - Key (may be binary data)
+ *   keyLen - Length of key (0 for null-terminated string)
+ *   data - User data pointer
+ *
+ * RETURNS:
+ *   Pointer to new record, or NULL if duplicate or allocation fails
+ *
+ * SIDE EFFECTS:
+ *   Allocates memory for record and key copy
  *
  ****/
 
@@ -458,7 +496,18 @@ struct hashRec_s *addUniqueHashRec(struct hash_s *hash, const char *keyString, i
 
 /****
  *
- * insert an existing record into the hash
+ * Insert pre-allocated record into hash
+ *
+ * DESCRIPTION:
+ *   Inserts existing hash record into table (used during resize operations).
+ *   Maintains sorted order within collision lists.
+ *
+ * PARAMETERS:
+ *   hash - Hash table
+ *   hashRec - Pre-allocated record to insert
+ *
+ * RETURNS:
+ *   TRUE on success, FAILED/FALSE on duplicate or allocation error
  *
  ****/
 
@@ -594,7 +643,22 @@ int insertUniqueHashRec(struct hash_s *hash, struct hashRec_s *hashRec)
 
 /****
  *
- * get hash record pointer
+ * Retrieve hash record by key
+ *
+ * DESCRIPTION:
+ *   Searches for record with exact key match using binary search. Updates lastSeen
+ *   timestamp on successful lookup.
+ *
+ * PARAMETERS:
+ *   hash - Hash table
+ *   keyString - Key to find
+ *   keyLen - Key length (0 for null-terminated)
+ *
+ * RETURNS:
+ *   Pointer to record, or NULL if not found
+ *
+ * SIDE EFFECTS:
+ *   Updates lastSeen field on match
  *
  ****/
 
@@ -664,7 +728,18 @@ struct hashRec_s *getHashRecord(struct hash_s *hash, const char *keyString, int 
 
 /****
  *
- * snoop hash record pointer
+ * Retrieve hash record without updating timestamp
+ *
+ * DESCRIPTION:
+ *   Same as getHashRecord but does not modify lastSeen field.
+ *
+ * PARAMETERS:
+ *   hash - Hash table
+ *   keyString - Key to find
+ *   keyLen - Key length (0 for null-terminated)
+ *
+ * RETURNS:
+ *   Pointer to record, or NULL if not found
  *
  ****/
 
@@ -744,7 +819,21 @@ struct hashRec_s *snoopHashRecord(struct hash_s *hash, const char *keyString, in
 
 /****
  *
- * get data in hash record
+ * Retrieve user data from hash record
+ *
+ * DESCRIPTION:
+ *   Looks up record and returns associated data pointer. Updates lastSeen timestamp.
+ *
+ * PARAMETERS:
+ *   hash - Hash table
+ *   keyString - Key to find
+ *   keyLen - Key length (0 for null-terminated)
+ *
+ * RETURNS:
+ *   Data pointer, or NULL if not found
+ *
+ * SIDE EFFECTS:
+ *   Updates lastSeen field on match
  *
  ****/
 
@@ -825,7 +914,18 @@ void *getHashData(struct hash_s *hash, const char *keyString, int keyLen)
 
 /****
  *
- * snoop hash record data
+ * Retrieve user data without updating timestamp
+ *
+ * DESCRIPTION:
+ *   Same as getHashData but does not modify lastSeen field.
+ *
+ * PARAMETERS:
+ *   hash - Hash table
+ *   keyString - Key to find
+ *   keyLen - Key length (0 for null-terminated)
+ *
+ * RETURNS:
+ *   Data pointer, or NULL if not found
  *
  ****/
 
@@ -905,7 +1005,22 @@ void *snoopHashData(struct hash_s *hash, const char *keyString, int keyLen)
 
 /****
  *
- * remove hash record
+ * Remove record from hash table
+ *
+ * DESCRIPTION:
+ *   Finds and deletes record, shrinking collision list. Returns user data pointer
+ *   for caller to free.
+ *
+ * PARAMETERS:
+ *   hash - Hash table
+ *   keyString - Key to delete
+ *   keyLen - Key length (0 for null-terminated)
+ *
+ * RETURNS:
+ *   Data pointer from deleted record, or NULL if not found
+ *
+ * SIDE EFFECTS:
+ *   Frees record and key memory, reallocates collision list
  *
  ****/
 
@@ -1013,7 +1128,20 @@ void *deleteHashRecord(struct hash_s *hash, const char *keyString, int keyLen)
 
 /****
  *
- * dynamic hash grow
+ * Grow hash table to next prime size
+ *
+ * DESCRIPTION:
+ *   Allocates larger hash table and rehashes all records when load factor exceeds
+ *   0.8. Returns new hash or original if at maximum size.
+ *
+ * PARAMETERS:
+ *   oldHash - Hash table to grow
+ *
+ * RETURNS:
+ *   Pointer to new hash (or original if growth not needed/possible)
+ *
+ * SIDE EFFECTS:
+ *   Frees old hash structure (but not user data)
  *
  ****/
 
@@ -1095,7 +1223,20 @@ struct hash_s *dyGrowHash(struct hash_s *oldHash)
 
 /****
  *
- * dynamic hash shrink
+ * Shrink hash table to smaller prime size
+ *
+ * DESCRIPTION:
+ *   Allocates smaller hash table and rehashes all records when load factor below
+ *   0.3. Returns new hash or original if at minimum size.
+ *
+ * PARAMETERS:
+ *   oldHash - Hash table to shrink
+ *
+ * RETURNS:
+ *   Pointer to new hash (or original if shrink not needed/possible)
+ *
+ * SIDE EFFECTS:
+ *   Frees old hash structure (but not user data)
  *
  ****/
 
@@ -1176,7 +1317,22 @@ struct hash_s *dyShrinkHash(struct hash_s *oldHash)
 
 /****
  *
- * get rid of old hash records
+ * Remove records older than specified age
+ *
+ * DESCRIPTION:
+ *   Scans hash and removes records with lastSeen older than age threshold.
+ *   Returns array of user data pointers from purged records.
+ *
+ * PARAMETERS:
+ *   hash - Hash table
+ *   age - Cutoff time (records with lastSeen < age are purged)
+ *   dataList - Existing data list to append to (or NULL for new list)
+ *
+ * RETURNS:
+ *   NULL-terminated array of data pointers from purged records
+ *
+ * SIDE EFFECTS:
+ *   Frees purged records, reallocates collision lists
  *
  ****/
 
@@ -1253,7 +1409,19 @@ void **purgeOldHashRecords(struct hash_s *hash, time_t age, void **dataList)
 
 /****
  *
- * print key string in hex (just in case it is not ascii)
+ * Convert binary key to hex string
+ *
+ * DESCRIPTION:
+ *   Formats potentially binary key as hex string for debug output.
+ *
+ * PARAMETERS:
+ *   keyString - Key data (may contain non-printable bytes)
+ *   keyLen - Length of key
+ *   buf - Output buffer
+ *   bufLen - Size of output buffer
+ *
+ * RETURNS:
+ *   Pointer to output buffer
  *
  ****/
 
@@ -1277,8 +1445,20 @@ char *hexConvert(const char *keyString, int keyLen, char *buf,
 
 /****
  *
- * deal with UTF strings
- * XXX this is a terrible way to handle this
+ * Convert UTF-16 string to ASCII (naive implementation)
+ *
+ * DESCRIPTION:
+ *   Simple UTF-16 to ASCII conversion by dropping high bytes. Does not properly
+ *   handle Unicode - only works for ASCII subset.
+ *
+ * PARAMETERS:
+ *   keyString - UTF-16 encoded string
+ *   keyLen - Length in bytes
+ *   buf - Output buffer
+ *   bufLen - Size of output buffer (unused)
+ *
+ * RETURNS:
+ *   Pointer to output buffer
  *
  ****/
 
@@ -1298,7 +1478,16 @@ char *utfConvert(const char *keyString, int keyLen, char *buf,
 
 /****
  *
- * return size of hash
+ * Get hash table size
+ *
+ * DESCRIPTION:
+ *   Returns current size (number of buckets) of hash table.
+ *
+ * PARAMETERS:
+ *   hash - Hash table
+ *
+ * RETURNS:
+ *   Size of hash table, or 0 if NULL
  *
  ****/
 

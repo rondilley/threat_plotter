@@ -107,7 +107,18 @@ static void cleanup_pid_file(const char *filename);
 
 /****
  *
- * display output
+ * Display formatted output to syslog or stderr
+ *
+ * DESCRIPTION:
+ *   Formats message and sends to syslog (daemon mode) or stderr/stdout (interactive mode).
+ *
+ * PARAMETERS:
+ *   level - Syslog priority level (LOG_ERR, LOG_INFO, etc.)
+ *   format - printf-style format string
+ *   ... - Variable arguments
+ *
+ * RETURNS:
+ *   TRUE on success, FAILED on error
  *
  ****/
 
@@ -164,7 +175,16 @@ int display(int level, const char *format, ...)
 
 /****
  *
- * open file descriptor for the null device
+ * Redirect file descriptor to /dev/null
+ *
+ * DESCRIPTION:
+ *   Redirects stdin/stdout/stderr to null device.
+ *
+ * PARAMETERS:
+ *   fd - File descriptor (0=stdin, 1=stdout, 2=stderr)
+ *
+ * RETURNS:
+ *   TRUE on success, FALSE on failure
  *
  ****/
 
@@ -183,7 +203,17 @@ PUBLIC int open_devnull(int fd)
 
 /****
  *
- * check to see if dir is safe
+ * Check directory permissions for security
+ *
+ * DESCRIPTION:
+ *   Validates directory ownership and permissions to prevent privilege escalation.
+ *   Checks directory tree up to root.
+ *
+ * PARAMETERS:
+ *   dir - Directory path to check
+ *
+ * RETURNS:
+ *   1 if safe, 0 if unsafe, FAILED on error
  *
  ****/
 
@@ -281,7 +311,16 @@ int is_dir_safe(const char *dir)
 
 /****
  *
- * create pid file
+ * Create PID file with current process ID
+ *
+ * DESCRIPTION:
+ *   Safely creates PID file, removing any existing file first.
+ *
+ * PARAMETERS:
+ *   filename - Path to PID file
+ *
+ * RETURNS:
+ *   TRUE on success, FAILED on error
  *
  ****/
 
@@ -324,7 +363,16 @@ int create_pid_file(const char *filename)
 
 /****
  *
- * safely open a file for writing
+ * Safely open file for writing
+ *
+ * DESCRIPTION:
+ *   Opens file with exclusive creation, preventing race conditions.
+ *
+ * PARAMETERS:
+ *   filename - File path
+ *
+ * RETURNS:
+ *   File descriptor on success, FAILED on error
  *
  ****/
 
@@ -353,7 +401,13 @@ static int safe_open(const char *filename)
 
 /****
  *
- * cleaup pid file
+ * Remove PID file
+ *
+ * DESCRIPTION:
+ *   Unlinks PID file if filename is non-empty.
+ *
+ * PARAMETERS:
+ *   filename - PID file path
  *
  ****/
 
@@ -367,7 +421,10 @@ static void cleanup_pid_file(const char *filename)
 
 /****
  *
- * sanitize environment
+ * Sanitize environment variables
+ *
+ * DESCRIPTION:
+ *   Creates clean environment with only safe variables. Prevents privilege escalation.
  *
  ****/
 
@@ -424,8 +481,19 @@ void sanitize_environment(void)
 }
 
 /****
+ *
  * Secure file open with symlink protection
- * SECURITY: Uses O_NOFOLLOW to prevent symlink attacks
+ *
+ * DESCRIPTION:
+ *   Opens file using O_NOFOLLOW flag to prevent symlink attacks.
+ *
+ * PARAMETERS:
+ *   path - File path
+ *   mode - fopen mode string ("r", "w", "a", etc.)
+ *
+ * RETURNS:
+ *   FILE pointer on success, NULL on error or symlink detected
+ *
  ****/
 PUBLIC FILE *secure_fopen(const char *path, const char *mode)
 {
