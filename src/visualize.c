@@ -101,18 +101,10 @@ extern Config_t *config;
  ****/
 
 /****
- *
- * Get font character index
- *
- * DESCRIPTION:
- *   Maps character to font bitmap index
- *
- * PARAMETERS:
- *   c - Character to map
+ * Map character to font bitmap index
  *
  * RETURNS:
  *   Font index (0-12), or 10 (space) if unknown
- *
  ****/
 PRIVATE int getFontIndex(char c)
 {
@@ -129,25 +121,7 @@ PRIVATE int getFontIndex(char c)
 }
 
 /****
- *
- * Draw character at position
- *
- * DESCRIPTION:
- *   Renders single character from bitmap font to image buffer
- *
- * PARAMETERS:
- *   image - RGB image buffer (3 bytes per pixel)
- *   img_width - Image width in pixels
- *   img_height - Image height in pixels
- *   x - X position (left)
- *   y - Y position (top)
- *   c - Character to draw
- *   r, g, b - RGB color values
- *   scale - Character scale factor
- *
- * RETURNS:
- *   void
- *
+ * Draw character at position using bitmap font
  ****/
 PRIVATE void drawChar(uint8_t *image, uint32_t img_width, uint32_t img_height,
                       uint32_t x, uint32_t y, char c,
@@ -181,21 +155,7 @@ PRIVATE void drawChar(uint8_t *image, uint32_t img_width, uint32_t img_height,
 }
 
 /****
- *
- * Draw timestamp text
- *
- * DESCRIPTION:
- *   Renders timestamp string at bottom left of frame
- *
- * PARAMETERS:
- *   image - RGB image buffer
- *   img_width - Image width
- *   img_height - Image height
- *   timestamp - Time to display
- *
- * RETURNS:
- *   void
- *
+ * Draw timestamp string at bottom left of frame
  ****/
 PRIVATE void drawTimestamp(uint8_t *image, uint32_t img_width, uint32_t img_height, time_t timestamp)
 {
@@ -221,46 +181,17 @@ PRIVATE void drawTimestamp(uint8_t *image, uint32_t img_width, uint32_t img_heig
 }
 
 /****
- *
  * Initialize visualization system
  *
  * DESCRIPTION:
- *   Initializes the visualization subsystem with output configuration.
- *   Copies configuration parameters and sets initialization flag.
- *   Must be called before any rendering operations.
+ *   Initializes visualization with output configuration. Must be called
+ *   before rendering operations.
  *
  * PARAMETERS:
- *   config_in - Pointer to VisualizationConfig_t containing:
- *               - width: Output image width in pixels
- *               - height: Output image height in pixels
- *               - output_dir: Directory path for output frames
- *               - output_prefix: Filename prefix for frames
+ *   config_in - Configuration (width, height, output_dir, output_prefix)
  *
  * RETURNS:
- *   TRUE (1) on success
- *   FALSE (0) if config_in is NULL
- *
- * SIDE EFFECTS:
- *   Copies config_in to static viz_config
- *   Sets viz_initialized flag to TRUE
- *   Prints debug message if config->debug >= 1
- *
- * ALGORITHM:
- *   1. Validate config_in pointer
- *   2. memcpy() config_in to viz_config
- *   3. Set viz_initialized = TRUE
- *   4. Print debug output if enabled
- *
- * PERFORMANCE:
- *   O(1) - Single memcpy() of small struct
- *   Typical: <100ns
- *
- * NOTES:
- *   - Must call before renderTimeBin() or writePPM()
- *   - Safe to call multiple times (overwrites previous config)
- *   - Does not allocate memory
- *   - Pairs with deInitVisualization()
- *
+ *   TRUE on success, FALSE if config_in is NULL
  ****/
 int initVisualization(VisualizationConfig_t *config_in)
 {
@@ -282,42 +213,11 @@ int initVisualization(VisualizationConfig_t *config_in)
 }
 
 /****
- *
  * Deinitialize visualization system and free resources
  *
  * DESCRIPTION:
- *   Cleans up visualization subsystem by freeing cached non-routable mask
- *   and clearing initialization flag. Safe to call multiple times.
- *
- * PARAMETERS:
- *   None
- *
- * RETURNS:
- *   void
- *
- * SIDE EFFECTS:
- *   Frees cached_nonroutable_mask if non-NULL
- *   Resets cached_nonroutable_mask to NULL
- *   Resets cached_mask_order to 0
- *   Resets cached_mask_dimension to 0
- *   Sets viz_initialized to FALSE
- *
- * ALGORITHM:
- *   1. Check if cached_nonroutable_mask is allocated
- *   2. If allocated, free with XFREE()
- *   3. Reset cache pointers and dimensions
- *   4. Set viz_initialized = FALSE
- *
- * PERFORMANCE:
- *   O(1) - Single XFREE() call
- *   Typical: <1μs
- *
- * NOTES:
- *   - Safe to call even if initVisualization() was never called
- *   - Safe to call multiple times
- *   - Should be called at program shutdown to free mask memory
- *   - Mask cache size: dimension² bytes (e.g., 4096² = 16MB)
- *
+ *   Frees cached non-routable mask and clears initialization flag.
+ *   Safe to call multiple times.
  ****/
 void deInitVisualization(void)
 {
@@ -333,72 +233,20 @@ void deInitVisualization(void)
 }
 
 /****
- *
  * Create non-routable IP space mask for Hilbert curve visualization
  *
  * DESCRIPTION:
- *   Generates a binary mask identifying Hilbert curve coordinates that
- *   correspond to non-routable IP addresses (RFC1918 private, loopback,
- *   multicast, etc.). Samples the IPv4 space efficiently to map IPs to
- *   coordinates and mark non-routable positions. Used for overlay visualization.
+ *   Generates binary mask identifying non-routable IP coordinates (RFC1918
+ *   private, loopback, multicast, etc.). Samples IPv4 space and maps to
+ *   Hilbert coordinates. Result is cached to avoid repeated computation.
  *
  * PARAMETERS:
  *   order - Hilbert curve order (determines 2^order dimension)
  *   dimension - Hilbert curve dimension (must equal 2^order)
  *
  * RETURNS:
- *   Pointer to allocated uint8_t array of size dimension² on success
+ *   Allocated uint8_t array of size dimension² (0=routable, 1=non-routable)
  *   NULL on allocation failure
- *   Array values: 0 = routable, 1 = non-routable
- *
- * SIDE EFFECTS:
- *   Allocates memory for mask array (caller must free if not cached)
- *   Prints debug messages if config->debug >= 2
- *
- * ALGORITHM:
- *   1. Allocate mask array: dimension * dimension bytes
- *   2. Initialize all to 0 (routable)
- *   3. Determine sample_step:
- *      - order <= 10: step = 64 (finer sampling)
- *      - order > 10: step = 256 (coarser sampling for large curves)
- *   4. For each IP in IPv4 space (0 to 0xFFFFFFFF) by sample_step:
- *      a. Check if isNonRoutableIP(ip)
- *      b. If yes, map IP to Hilbert coordinates
- *      c. Mark mask[y * dimension + x] = 1
- *   5. Explicitly check last IP (0xFFFFFFFF) to handle wraparound
- *   6. Print statistics if debug enabled
- *
- * PERFORMANCE:
- *   O((2³²/sample_step) * order) - IP space sampling + Hilbert mapping
- *   For order=12, step=256: ~16M IP checks, ~5-10 seconds
- *   Result is cached to avoid repeated expensive computation
- *
- * MEMORY:
- *   dimension² bytes
- *   Examples:
- *   - order 10 (1024×1024): 1 MB
- *   - order 12 (4096×4096): 16 MB
- *   - order 14 (16384×16384): 256 MB
- *
- * SAMPLING STRATEGY:
- *   Full IPv4 space: 4,294,967,296 addresses
- *   Hilbert points (order 12): 16,777,216 coordinates
- *   Sample every 256 IPs gives ~16.7M samples for good coverage
- *   Trade-off: Lower sample_step = better accuracy, slower generation
- *
- * NON-ROUTABLE RANGES DETECTED:
- *   - 10.0.0.0/8 (RFC1918)
- *   - 172.16.0.0/12 (RFC1918)
- *   - 192.168.0.0/16 (RFC1918)
- *   - 127.0.0.0/8 (loopback)
- *   - 224.0.0.0/4 (multicast)
- *   - Plus 8 other reserved ranges (see isNonRoutableIP())
- *
- * NOTES:
- *   - Result is typically cached by caller to amortize cost
- *   - Mask represents sampled approximation, not exact coverage
- *   - Higher order curves need coarser sampling to stay performant
- *
  ****/
 PRIVATE uint8_t *createNonRoutableMask(uint8_t order, uint32_t dimension)
 {
@@ -476,60 +324,19 @@ PRIVATE uint8_t *createNonRoutableMask(uint8_t order, uint32_t dimension)
 }
 
 /****
- *
  * Map attack intensity to color gradient
  *
  * DESCRIPTION:
- *   Converts event intensity values to RGB colors using a white→yellow→red
- *   gradient. Applies high base brightness (50% minimum) to ensure single
- *   events are clearly visible. Uses non-linear scaling for maximum visibility
- *   mode where even low-volume attacks stand out against black background.
+ *   Converts event intensity to RGB using white→yellow→red gradient.
+ *   Applies 50% minimum brightness so single events are visible.
+ *   Color scale: Black (none) → White (low) → Yellow (medium) → Red (high)
  *
  * PARAMETERS:
- *   intensity - Event count at this coordinate (0 = no activity)
- *   max_intensity - Maximum intensity in current time bin (for normalization)
+ *   intensity - Event count at this coordinate
+ *   max_intensity - Maximum intensity in current time bin
  *
  * RETURNS:
  *   RGB_t struct with r,g,b values (0-255 each)
- *
- * SIDE EFFECTS:
- *   None (pure function)
- *
- * ALGORITHM:
- *   1. If intensity == 0: return black (0,0,0)
- *   2. Normalize: normalized = intensity / max_intensity (0.0-1.0)
- *   3. Apply high base brightness: enhanced = 0.5 + 0.5 * normalized
- *      - Single attack (intensity=1, max=1000): ~50% brightness
- *      - Maximum attacks: 100% brightness
- *   4. Clamp enhanced to [0.5, 1.0] range
- *   5. Map enhanced [0.5, 1.0] to t [0.0, 1.0]: t = (enhanced - 0.5) / 0.5
- *   6. Apply color gradient based on t:
- *      - t < 0.5 (White→Yellow): R=255, G=255, B fades 255→0
- *      - t >= 0.5 (Yellow→Red): R=255, G fades 255→0, B=0
- *
- * PERFORMANCE:
- *   O(1) - Simple floating point arithmetic
- *   Typical: <20ns
- *
- * COLOR GRADIENT:
- *   intensity=0:    (0, 0, 0)      Black - no activity
- *   Low volume:     (255, 255, *)  White - single/few events clearly visible
- *   Medium volume:  (255, *, 0)    Yellow - moderate attacks
- *   High volume:    (255, 0, 0)    Red - large attack campaigns
- *
- * BRIGHTNESS FORMULA:
- *   enhanced = 0.5 + 0.5 * normalized
- *   This ensures minimum 50% brightness for ANY non-zero activity,
- *   making single events stand out clearly on black background.
- *
- * EXAMPLES:
- *   intensity=0, max=1000   → (0,0,0)        Black
- *   intensity=1, max=1000   → (255,255,255)  White (50% brightness)
- *   intensity=250, max=1000 → (255,255,127)  Light yellow (62.5%)
- *   intensity=500, max=1000 → (255,255,0)    Yellow (75%)
- *   intensity=750, max=1000 → (255,127,0)    Orange (87.5%)
- *   intensity=1000, max=1000 → (255,0,0)     Red (100%)
- *
  ****/
 RGB_t intensityToColor(uint32_t intensity, uint32_t max_intensity)
 {
@@ -594,13 +401,11 @@ RGB_t intensityToColor(uint32_t intensity, uint32_t max_intensity)
 }
 
 /****
- *
  * Write time bin heatmap as PPM image file
  *
  * DESCRIPTION:
- *   Renders heatmap to PPM format with color gradient and non-routable IP overlay.
- *   Centers square Hilbert curve in rectangular frame. Uses cached mask for efficiency.
- *   Renders residue map as dark grey layer for historical attack memory.
+ *   Renders heatmap with color gradient, non-routable IP overlay, and
+ *   residue map (historical attack memory). Optionally adds timestamp.
  *
  * PARAMETERS:
  *   filename - Output file path
@@ -611,10 +416,6 @@ RGB_t intensityToColor(uint32_t intensity, uint32_t max_intensity)
  *
  * RETURNS:
  *   TRUE on success, FALSE on error
- *
- * SIDE EFFECTS:
- *   Creates/overwrites file, may create and cache non-routable mask
- *
  ****/
 int writePPM(const char *filename, const TimeBin_t *bin, uint32_t width, uint32_t height, const uint8_t *residue_map)
 {
@@ -814,23 +615,13 @@ int writePPM(const char *filename, const TimeBin_t *bin, uint32_t width, uint32_
 }
 
 /****
- *
  * Generate timestamped filename for time bin frame
  *
  * DESCRIPTION:
- *   Creates formatted filename: {dir}/{prefix}_{YYYYMMDD_HHMMSS}_{NNNN}.ppm
- *
- * PARAMETERS:
- *   buf - Output buffer
- *   buf_size - Buffer size
- *   dir - Directory (NULL = ".")
- *   prefix - Filename prefix (NULL = "frame")
- *   bin_start - Timestamp
- *   bin_num - Frame sequence number
+ *   Creates filename: {dir}/{prefix}_{YYYYMMDD_HHMMSS}_{NNNN}.ppm
  *
  * RETURNS:
  *   TRUE on success, FALSE if buf is NULL
- *
  ****/
 int generateBinFilename(char *buf, size_t buf_size, const char *dir,
                        const char *prefix, time_t bin_start, uint32_t bin_num)
@@ -855,22 +646,13 @@ int generateBinFilename(char *buf, size_t buf_size, const char *dir,
 }
 
 /****
- *
  * Render time bin to image file
  *
  * DESCRIPTION:
- *   Wrapper that renders TimeBin_t to image file. Currently delegates to writePPM().
- *
- * PARAMETERS:
- *   bin - TimeBin_t to render
- *   output_path - Output file path
- *   width - Image width
- *   height - Image height
- *   residue_map - Persistent attack memory bitmap (may be NULL)
+ *   Renders TimeBin_t to PPM image file
  *
  * RETURNS:
  *   TRUE on success, FALSE on error
- *
  ****/
 int renderTimeBin(const TimeBin_t *bin, const char *output_path, uint32_t width, uint32_t height, const uint8_t *residue_map)
 {

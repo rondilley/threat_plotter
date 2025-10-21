@@ -210,7 +210,7 @@ void *xmalloc_(const int size, const char *filename, const int linenumber)
   d_result = malloc(sizeof(struct Mem_s));
   if (d_result EQ NULL)
   {
-    fprintf(stderr, "out of memory (%lu at %s:%d)!\n", sizeof(struct Mem_s),
+    fprintf(stderr, "out of memory (%zu at %s:%d)!\n", sizeof(struct Mem_s),
             filename, linenumber);
     XFREE_ALL();
     exit(EXIT_FAILURE);
@@ -744,7 +744,7 @@ void *xrealloc_(void *ptr, int size, const char *filename, const int linenumber)
   d_result = malloc(sizeof(struct Mem_s));
   if (d_result EQ NULL)
   {
-    fprintf(stderr, "out of memory (%lu at %s:%d)!\n", sizeof(struct Mem_s), filename, linenumber);
+    fprintf(stderr, "out of memory (%zu at %s:%d)!\n", sizeof(struct Mem_s), filename, linenumber);
     XFREE_ALL();
     exit(EXIT_FAILURE);
   }
@@ -1263,7 +1263,7 @@ char *xstrncpy_(char *d_ptr, const char *s_ptr, const size_t len, const char *fi
     {
       /* attempting to copy too much data into dest */
       fprintf(stderr,
-              "strncpy called with size (%lu) larger than dest buffer %p (%d) at %s:%d\n",
+              "strncpy called with size (%zu) larger than dest buffer %p (%d) at %s:%d\n",
               len, d_ptr, dest_size, filename, linenumber);
       XFREE_ALL();
       exit(1);
@@ -1275,7 +1275,7 @@ char *xstrncpy_(char *d_ptr, const char *s_ptr, const size_t len, const char *fi
       {
         /* attempting to copy too much data from source */
         fprintf(stderr,
-                "strncpy called with size (%lu) larger than source buffer %p (%d) at %s:%d\n",
+                "strncpy called with size (%zu) larger than source buffer %p (%d) at %s:%d\n",
                 len, s_ptr, source_size, filename, linenumber);
         XFREE_ALL();
         exit(1);
@@ -1318,7 +1318,7 @@ char *xstrncpy_(char *d_ptr, const char *s_ptr, const size_t len, const char *fi
   }
 
 #ifdef SHOW_MEM_DEBUG
-  fprintf(stderr, "%p strncpy() called from %s:%d (%lu bytes)\n",
+  fprintf(stderr, "%p strncpy() called from %s:%d (%zu bytes)\n",
           result, filename, linenumber, size);
 #endif
 

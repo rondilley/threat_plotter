@@ -250,7 +250,7 @@ void freeHash(struct hash_s *hash)
       hash->lists = NULL;
     }
     XFREE(hash);
-    hash = NULL;
+    /* Note: Setting hash=NULL here is useless - doesn't affect caller's pointer */
   }
 }
 
@@ -411,7 +411,7 @@ struct hashRec_s *addUniqueHashRec(struct hash_s *hash, const char *keyString, i
     {
 #ifdef DEBUG
       if (config->debug >= 1)
-        printf("DEBUG - snoop hashrec Count: %lu L: %d M: %d H: %d\n", hash->lists[key]->count, low, mid, high);
+        printf("DEBUG - snoop hashrec Count: %u L: %d M: %d H: %d\n", (unsigned)hash->lists[key]->count, low, mid, high);
 #endif
       if ((ret = strcmp(keyString, hash->lists[key]->records[mid]->keyString)) > 0)
         low = mid + 1;
@@ -478,9 +478,9 @@ struct hashRec_s *addUniqueHashRec(struct hash_s *hash, const char *keyString, i
   if (config->debug >= 4)
   {
     if (keyString[keyLen - 1] EQ 0) // it is a null terminated key string
-      printf("DEBUG - Added hash [%u] (%s) in record list [%lu]\n", key, keyString, hash->lists[key]->count);
+      printf("DEBUG - Added hash [%u] (%s) in record list [%u]\n", key, keyString, (unsigned)hash->lists[key]->count);
     else
-      printf("DEBUG - Added hash [%u] (%s) in record list [%lu]\n", key, hexConvert(keyString, keyLen, nBuf, (int)sizeof(nBuf)), hash->lists[key]->count);
+      printf("DEBUG - Added hash [%u] (%s) in record list [%u]\n", key, hexConvert(keyString, keyLen, nBuf, (int)sizeof(nBuf)), (unsigned)hash->lists[key]->count);
   }
 #endif
 
@@ -581,7 +581,7 @@ int insertUniqueHashRec(struct hash_s *hash, struct hashRec_s *hashRec)
     {
 #ifdef DEBUG
       if (config->debug >= 1)
-        printf("DEBUG - snoop hashrec Count: %lu L: %d M: %d H: %d\n", hash->lists[key]->count, low, mid, high);
+        printf("DEBUG - snoop hashrec Count: %u L: %d M: %d H: %d\n", (unsigned)hash->lists[key]->count, low, mid, high);
 #endif
 
       if ((ret = strcmp(hashRec->keyString, hash->lists[key]->records[mid]->keyString)) > 0)
@@ -625,9 +625,9 @@ int insertUniqueHashRec(struct hash_s *hash, struct hashRec_s *hashRec)
   if (config->debug >= 4)
   {
     if (hashRec->keyString[hashRec->keyLen - 1] EQ 0) // it is a null terminated key string
-      printf("DEBUG - Added hash [%u] (%s) in record list [%lu]\n", key, hashRec->keyString, hash->lists[key]->count);
+      printf("DEBUG - Added hash [%u] (%s) in record list [%u]\n", key, hashRec->keyString, (unsigned)hash->lists[key]->count);
     else
-      printf("DEBUG - Added hash [%u] (%s) in record list [%lu]\n", key, hexConvert(hashRec->keyString, hashRec->keyLen, nBuf, (int)sizeof(nBuf)), hash->lists[key]->count);
+      printf("DEBUG - Added hash [%u] (%s) in record list [%u]\n", key, hexConvert(hashRec->keyString, hashRec->keyLen, nBuf, (int)sizeof(nBuf)), (unsigned)hash->lists[key]->count);
   }
 #endif
 
@@ -702,7 +702,7 @@ struct hashRec_s *getHashRecord(struct hash_s *hash, const char *keyString, int 
 
 #ifdef DEBUG
       if (config->debug >= 1)
-        printf("DEBUG - snoop hashrec Count: %lu L: %d M: %d H: %d\n", hash->lists[key]->count, low, mid, high);
+        printf("DEBUG - snoop hashrec Count: %u L: %d M: %d H: %d\n", (unsigned)hash->lists[key]->count, low, mid, high);
 #endif
 
       if ((ret = strcmp(keyString, hash->lists[key]->records[mid]->keyString)) > 0)
@@ -1431,6 +1431,11 @@ char *hexConvert(const char *keyString, int keyLen, char *buf,
   int i;
   int max_chars;
   char *ptr = buf;
+
+  /* Initialize buffer to empty string in case loop doesn't execute */
+  if (bufLen > 0) {
+    buf[0] = '\0';
+  }
 
   /* Calculate maximum characters to avoid overflow warning in loop */
   max_chars = (bufLen > 1) ? ((bufLen / 2) - 1) : 0;

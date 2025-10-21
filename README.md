@@ -101,6 +101,54 @@ gcc -o cidr_mapper src/cidr_map.c -lmaxminddb
 ./cidr_mapper GeoLite2-City.mmdb cidr_map.txt 4096
 ```
 
+## Testing
+
+Run the test suite to verify core functionality:
+
+```bash
+cd tests
+make
+make run
+```
+
+Tests cover:
+- **Hilbert curve determinism**: Verifies IPs always map to same coordinates
+- **Parser edge cases**: NULL inputs, empty strings, malformed logs, buffer overflow protection
+
+See `tests/README.md` for details on adding new tests.
+
+## Static Analysis
+
+Run static analysis tools to detect potential bugs and code quality issues:
+
+```bash
+cd src
+
+# Run cppcheck (recommended - fast and comprehensive)
+make cppcheck
+
+# Run all static analysis tools (cppcheck, scan-build, splint)
+make static-analysis
+
+# Generate XML report for CI/CD
+make cppcheck-xml
+```
+
+**Available analyzers:**
+- **cppcheck**: Fast C/C++ analyzer (recommended for regular use)
+- **scan-build**: Clang static analyzer (requires clang-tools)
+- **splint**: Legacy static checker (many false positives)
+
+**Installing static analysis tools** (Arch Linux):
+```bash
+sudo pacman -S cppcheck clang  # cppcheck and scan-build
+```
+
+**Installing static analysis tools** (Debian/Ubuntu):
+```bash
+sudo apt-get install cppcheck clang-tools splint
+```
+
 ## Usage
 
 ### Basic Visualization

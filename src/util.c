@@ -505,21 +505,24 @@ PUBLIC FILE *secure_fopen(const char *path, const char *mode)
     return NULL;
   }
 
-  /* Determine flags based on mode */
-  if (strchr(mode, 'r') && !strchr(mode, '+')) {
-    flags = O_RDONLY | O_NOFOLLOW;
-  } else if (strchr(mode, 'w')) {
-    flags = O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW;
-  } else if (strchr(mode, 'a')) {
-    flags = O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW;
-  } else if (strchr(mode, '+')) {
+  /* Determine flags based on mode - check '+' variants first */
+  if (strchr(mode, '+')) {
     if (strchr(mode, 'r')) {
       flags = O_RDWR | O_NOFOLLOW;
     } else if (strchr(mode, 'w')) {
       flags = O_RDWR | O_CREAT | O_TRUNC | O_NOFOLLOW;
     } else if (strchr(mode, 'a')) {
       flags = O_RDWR | O_CREAT | O_APPEND | O_NOFOLLOW;
+    } else {
+      fprintf(stderr, "ERR - Invalid file mode: %s\n", mode);
+      return NULL;
     }
+  } else if (strchr(mode, 'r')) {
+    flags = O_RDONLY | O_NOFOLLOW;
+  } else if (strchr(mode, 'w')) {
+    flags = O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW;
+  } else if (strchr(mode, 'a')) {
+    flags = O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW;
   } else {
     fprintf(stderr, "ERR - Invalid file mode: %s\n", mode);
     return NULL;

@@ -17,6 +17,11 @@ AC_PREFIX_DEFAULT(/usr/local)
 CFLAGS="${CFLAGS} -I. -I.. -I../include `getconf LFS64_CFLAGS`"
 LDFLAGS="${LDFLAGS} `getconf LFS64_LDFLAGS` `getconf LFS64_LIBS`"
 
+dnl Enable strict warnings by default for GCC/Clang
+if test "$GCC" = yes; then
+    CFLAGS="${CFLAGS} -Wall -Wextra -Wpedantic -Wformat=2"
+fi
+
 SPLINT="no"
 AC_ARG_ENABLE(splint,
     [  --enable-splint         Debug the code with splint],
@@ -59,13 +64,22 @@ AC_ARG_ENABLE(pineapple,
       CFLAGS="${CFLAGS} -DPINEAPPLE"
     ,)
 
+WERROR="no"
+AC_ARG_ENABLE(werror,
+    [  --enable-werror         Treat warnings as errors],
+    [ if test "$GCC" = yes; then
+          WERROR="yes"
+          CFLAGS="${CFLAGS} -Werror"
+      fi
+    ],)
+
 HARDENING="no"
 AC_ARG_ENABLE(hardening,
     [  --enable-hardening      Enable compiler security hardening],
     [ if test "$GCC" = yes; then
           HARDENING="yes"
           CFLAGS="${CFLAGS} -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE"
-          CFLAGS="${CFLAGS} -Wformat -Wformat-security -Werror=format-security"
+          CFLAGS="${CFLAGS} -Wformat-security -Werror=format-security"
           CFLAGS="${CFLAGS} -fno-strict-overflow -fno-delete-null-pointer-checks"
           LDFLAGS="${LDFLAGS} -pie -Wl,-z,relro -Wl,-z,now"
       fi
@@ -280,7 +294,10 @@ echo ""
 echo "Enable debugging      : ${DEBUG}"
 echo "Enable mem debugging  : ${MEM_DEBUG}"
 echo "Show mem debugging    : ${SHOW_MEM_DEBUG}"
+echo "Warnings as errors    : ${WERROR}"
 echo "Security hardening    : ${HARDENING}"
 echo "Static analysis       : ${STATIC_ANALYSIS}"
+echo ""
+echo "Default warnings      : -Wall -Wextra -Wpedantic -Wformat=2"
 echo "-----------------------------------------------"
 echo ""

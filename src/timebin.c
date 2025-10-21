@@ -764,7 +764,7 @@ void destroyTimeBinManager(TimeBinManager_t *manager)
  *   - Events MUST be processed in time order for correct binning
  *   - Out-of-order events will trigger premature bin finalization
  *   - Decay cache maintains coordinate visibility across bins
- *   - TODO comment indicates bin output not yet implemented
+ *   - Bin output handled via external visualization callbacks
  *
  ****/
 int processEvent(TimeBinManager_t *manager, time_t event_time, uint32_t x, uint32_t y)
@@ -780,10 +780,9 @@ int processEvent(TimeBinManager_t *manager, time_t event_time, uint32_t x, uint3
 
     /* Check if we need a new bin */
     if (!manager->current_bin || bin_start != manager->current_bin->bin_start) {
-        /* Finalize and write current bin if it exists */
+        /* Finalize current bin if it exists (rendering handled externally) */
         if (manager->current_bin) {
             finalizeBin(manager->current_bin);
-            /* TODO: Write bin to output file */
             manager->bins_written++;
             destroyTimeBin(manager->current_bin);
         }

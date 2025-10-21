@@ -9,25 +9,51 @@ AM_CFLAGS += -Wmissing-declarations -Wredundant-decls -Wnested-externs -Winline
 AM_CFLAGS += -Wno-long-long -Wundef -Wconversion -Wstrict-overflow=5
 
 # Static Analysis targets
-.PHONY: static-analysis cppcheck scan-build splint-check
+.PHONY: static-analysis cppcheck cppcheck-xml scan-build splint-check
 
-# Run all static analysis tools
+# Run all static analysis tools (cppcheck, scan-build, splint)
 static-analysis: cppcheck scan-build splint-check
+	@echo ""
+	@echo "=== All static analysis tools completed ==="
+	@echo "Review results above and in generated files"
 
-# Cppcheck static analysis
+# Cppcheck static analysis (console output)
 cppcheck:
-	@echo "Running cppcheck static analysis..."
+	@echo "=== Running cppcheck static analysis ==="
 	@if command -v cppcheck >/dev/null 2>&1; then \
 		cppcheck --enable=all --std=c11 --platform=unix64 \
 		         --suppress=missingIncludeSystem \
 		         --suppress=unusedFunction \
 		         --inline-suppr \
+		         --force \
+		         -I../include \
+		         $(tplot_SOURCES) || true; \
+		echo ""; \
+		echo "=== Cppcheck analysis complete ==="; \
+	else \
+		echo "ERROR: cppcheck not found"; \
+		echo "Install with: sudo pacman -S cppcheck  (Arch)"; \
+		echo "          or: sudo apt-get install cppcheck  (Debian/Ubuntu)"; \
+		exit 1; \
+	fi
+
+# Cppcheck with XML output for CI/CD
+cppcheck-xml:
+	@echo "Running cppcheck with XML output..."
+	@if command -v cppcheck >/dev/null 2>&1; then \
+		cppcheck --enable=all --std=c11 --platform=unix64 \
+		         --suppress=missingIncludeSystem \
+		         --suppress=unusedFunction \
+		         --inline-suppr \
+		         --force \
+		         -I../include \
 		         --xml --xml-version=2 \
 		         --output-file=cppcheck-results.xml \
 		         $(tplot_SOURCES) 2>&1 && \
-		echo "Cppcheck results saved to cppcheck-results.xml"; \
+		echo "Cppcheck XML results saved to cppcheck-results.xml"; \
 	else \
-		echo "cppcheck not found. Install with: sudo apt-get install cppcheck"; \
+		echo "cppcheck not found"; \
+		exit 1; \
 	fi
 
 # Clang Static Analyzer

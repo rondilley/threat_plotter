@@ -462,8 +462,6 @@ int parseHoneypotLine(const char *line, HoneypotEvent_t *event)
     strncpy(event->dst_ip_str, ip_buf, sizeof(event->dst_ip_str) - 1);
     event->dst_ip_str[sizeof(event->dst_ip_str) - 1] = '\0';
 
-    /* TODO: Extract TCP flags if needed */
-
 #ifdef DEBUG
     if (config->debug >= 5) {
         fprintf(stderr, "DEBUG - Parsed: %s:%u -> %s:%u proto=%u time=%ld.%06u\n",
