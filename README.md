@@ -8,6 +8,8 @@ You can find the latest information on tplot [here](http://www.uberadmin.com/Pro
 
 Threat Plot is a visualization tool that processes log files from honeypots and other security sources and plots the data on Hilbert curves. Source IP addresses are positioned deterministically such that CIDR blocks naturally cluster together, revealing attack campaigns and patterns. Optional timezone-aware CIDR mapping enhances geographic context.
 
+**Attribution**: The concept of using Hilbert curves to map the Internet in a visual field was originally proposed by [Trent Hampton](https://www.linkedin.com/in/trent-hampton-65870345/).
+
 ## Why use it?
 
 This tool helps security analysts visualize attack patterns and threat data from honeypots and other security log sources. By plotting data on Hilbert curves with automatic CIDR clustering, you can:

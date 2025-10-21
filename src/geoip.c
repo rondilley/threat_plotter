@@ -44,11 +44,22 @@ PRIVATE MMDB_s mmdb;
 PRIVATE int geoip_initialized = FALSE;
 PRIVATE struct hash_s *geoip_cache = NULL;
 
+/* ASN database and cache */
+PRIVATE MMDB_s asn_mmdb;
+PRIVATE int asn_initialized = FALSE;
+PRIVATE struct hash_s *asn_cache = NULL;
+
 /* Cache statistics */
 PRIVATE uint32_t cache_hits = 0;
 PRIVATE uint32_t cache_misses = 0;
 PRIVATE uint32_t lookup_success = 0;
 PRIVATE uint32_t lookup_failures = 0;
+
+/* ASN cache statistics */
+PRIVATE uint32_t asn_cache_hits = 0;
+PRIVATE uint32_t asn_cache_misses = 0;
+PRIVATE uint32_t asn_lookup_success = 0;
+PRIVATE uint32_t asn_lookup_failures = 0;
 
 /****
  *
@@ -560,4 +571,285 @@ void formatIPAddress(uint32_t ipv4, char *buf, size_t buf_size)
     struct in_addr addr;
     addr.s_addr = htonl(ipv4);
     inet_ntop(AF_INET, &addr, buf, (socklen_t)buf_size);
+}
+
+/****
+ *
+ * Initialize ASN lookup with MaxMind ASN database
+ *
+ * DESCRIPTION:
+ *   Opens MaxMind ASN database and initializes lookup cache.
+ *
+ * PARAMETERS:
+ *   db_path - Path to MaxMind GeoLite2-ASN.mmdb file
+ *
+ * RETURNS:
+ *   TRUE on success, FALSE on error
+ *
+ * SIDE EFFECTS:
+ *   Allocates cache hash table and opens database file
+ *
+ ****/
+int initASN(const char *db_path)
+{
+    int status;
+
+    if (asn_initialized) {
+        fprintf(stderr, "WARN - ASN already initialized\n");
+        return TRUE;
+    }
+
+    /* Open MaxMind ASN database */
+    status = MMDB_open(db_path, MMDB_MODE_MMAP, &asn_mmdb);
+    if (status != MMDB_SUCCESS) {
+        fprintf(stderr, "ERR - Cannot open ASN database %s: %s\n",
+                db_path, MMDB_strerror(status));
+        return FALSE;
+    }
+
+    /* Initialize ASN cache */
+    asn_cache = initHash(GEOIP_CACHE_SIZE_DEFAULT);
+    if (asn_cache == NULL) {
+        fprintf(stderr, "ERR - Cannot initialize ASN cache\n");
+        MMDB_close(&asn_mmdb);
+        return FALSE;
+    }
+
+    asn_initialized = TRUE;
+
+#ifdef DEBUG
+    if (config->debug >= 1) {
+        fprintf(stderr, "DEBUG - ASN initialized: %s (type=%s)\n",
+                db_path, asn_mmdb.metadata.database_type);
+    }
+#endif
+
+    return TRUE;
+}
+
+/****
+ *
+ * Release ASN resources
+ *
+ * DESCRIPTION:
+ *   Closes MaxMind ASN database and frees cache memory.
+ *
+ * PARAMETERS:
+ *   None
+ *
+ * RETURNS:
+ *   void
+ *
+ * SIDE EFFECTS:
+ *   Frees cache and closes database file
+ *
+ ****/
+void deInitASN(void)
+{
+    if (!asn_initialized) {
+        return;
+    }
+
+    if (asn_cache != NULL) {
+        freeHash(asn_cache);
+        asn_cache = NULL;
+    }
+
+    MMDB_close(&asn_mmdb);
+    asn_initialized = FALSE;
+
+#ifdef DEBUG
+    if (config->debug >= 1) {
+        fprintf(stderr, "DEBUG - ASN deinitialized (hits=%u, misses=%u, success=%u, fail=%u)\n",
+                asn_cache_hits, asn_cache_misses, asn_lookup_success, asn_lookup_failures);
+    }
+#endif
+}
+
+/****
+ *
+ * Check if ASN system is initialized
+ *
+ * DESCRIPTION:
+ *   Returns initialization status of ASN system.
+ *
+ * PARAMETERS:
+ *   None
+ *
+ * RETURNS:
+ *   TRUE if initialized, FALSE otherwise
+ *
+ ****/
+int isASNAvailable(void)
+{
+    return asn_initialized;
+}
+
+/****
+ *
+ * Get ASN information for IP address
+ *
+ * DESCRIPTION:
+ *   Queries MaxMind ASN database for AS number and organization name.
+ *   Uses cache to avoid redundant lookups.
+ *
+ * PARAMETERS:
+ *   ipv4 - IPv4 address in host byte order
+ *
+ * RETURNS:
+ *   Pointer to ASNInfo structure (cached or newly allocated)
+ *
+ * SIDE EFFECTS:
+ *   May add entry to cache
+ *
+ ****/
+ASNInfo_t *lookupASN(uint32_t ipv4)
+{
+    ASNCacheEntry_t *cached;
+    MMDB_lookup_result_s lookup_result;
+    MMDB_entry_data_s entry_data;
+    int gai_error, mmdb_error;
+    char ip_str[INET_ADDRSTRLEN];
+    char cache_key[16];
+    struct sockaddr_in sa;
+    static ASNInfo_t fallback;
+
+    /* Initialize fallback */
+    memset(&fallback, 0, sizeof(fallback));
+    fallback.valid = FALSE;
+    fallback.asn = 0;
+    strncpy(fallback.asn_org, "Unknown", sizeof(fallback.asn_org) - 1);
+    fallback.asn_org[sizeof(fallback.asn_org) - 1] = '\0';
+
+    if (!asn_initialized) {
+        asn_lookup_failures++;
+        return &fallback;
+    }
+
+    /* Create hash key from IP */
+    snprintf(cache_key, sizeof(cache_key), "%u", ipv4);
+
+    /* Check cache first */
+    cached = (ASNCacheEntry_t *)getHashData(asn_cache, cache_key, (int)strlen(cache_key));
+    if (cached != NULL) {
+        asn_cache_hits++;
+        cached->hit_count++;
+        return &cached->asn_info;
+    }
+
+    asn_cache_misses++;
+
+    /* Convert IP to string for lookup */
+    sa.sin_addr.s_addr = htonl(ipv4);
+    inet_ntop(AF_INET, &sa.sin_addr, ip_str, sizeof(ip_str));
+
+    /* Perform MaxMind lookup */
+    lookup_result = MMDB_lookup_string(&asn_mmdb, ip_str, &gai_error, &mmdb_error);
+
+    if (gai_error != 0 || mmdb_error != MMDB_SUCCESS || !lookup_result.found_entry) {
+        asn_lookup_failures++;
+        return &fallback;
+    }
+
+    /* Allocate new cache entry */
+    cached = (ASNCacheEntry_t *)XMALLOC(sizeof(ASNCacheEntry_t));
+    if (cached == NULL) {
+        asn_lookup_failures++;
+        return &fallback;
+    }
+
+    memset(cached, 0, sizeof(ASNCacheEntry_t));
+    cached->ip = ipv4;
+    cached->cached_time = time(NULL);
+    cached->hit_count = 1;
+    cached->asn_info.valid = TRUE;
+
+    /* Extract ASN */
+    if (MMDB_get_value(&lookup_result.entry, &entry_data, "autonomous_system_number", NULL) == MMDB_SUCCESS &&
+        entry_data.has_data && entry_data.type == MMDB_DATA_TYPE_UINT32) {
+        cached->asn_info.asn = entry_data.uint32;
+    }
+
+    /* Extract organization name */
+    if (MMDB_get_value(&lookup_result.entry, &entry_data, "autonomous_system_organization", NULL) == MMDB_SUCCESS &&
+        entry_data.has_data && entry_data.type == MMDB_DATA_TYPE_UTF8_STRING) {
+        snprintf(cached->asn_info.asn_org, sizeof(cached->asn_info.asn_org),
+                 "%.*s", (int)entry_data.data_size, entry_data.utf8_string);
+    }
+
+    /* Add to cache */
+    if (addUniqueHashRec(asn_cache, cache_key, (int)strlen(cache_key), cached) == NULL) {
+        XFREE(cached);
+        asn_lookup_failures++;
+        return &fallback;
+    }
+
+    asn_lookup_success++;
+
+#ifdef DEBUG
+    if (config->debug >= 5) {
+        fprintf(stderr, "DEBUG - ASN lookup: %s -> AS%u (%s)\n",
+                ip_str, cached->asn_info.asn, cached->asn_info.asn_org);
+    }
+#endif
+
+    return &cached->asn_info;
+}
+
+/****
+ *
+ * Reset ASN lookup cache
+ *
+ * DESCRIPTION:
+ *   Clears all cached ASN lookups and resets statistics.
+ *
+ * PARAMETERS:
+ *   None
+ *
+ * RETURNS:
+ *   void
+ *
+ * SIDE EFFECTS:
+ *   Frees and reallocates cache hash table
+ *
+ ****/
+void clearASNCache(void)
+{
+    if (asn_cache != NULL) {
+        freeHash(asn_cache);
+        asn_cache = initHash(GEOIP_CACHE_SIZE_DEFAULT);
+    }
+    asn_cache_hits = 0;
+    asn_cache_misses = 0;
+}
+
+/****
+ *
+ * Display ASN cache performance metrics
+ *
+ * DESCRIPTION:
+ *   Prints cache hit rate, lookup success rate, and entry count.
+ *
+ * PARAMETERS:
+ *   None
+ *
+ * RETURNS:
+ *   void
+ *
+ ****/
+void printASNCacheStats(void)
+{
+    uint32_t total = asn_cache_hits + asn_cache_misses;
+    float hit_rate = total > 0 ? (float)asn_cache_hits / (float)total * 100.0f : 0.0f;
+
+    fprintf(stderr, "\n=== ASN Cache Statistics ===\n");
+    fprintf(stderr, "Cache hits:          %u\n", asn_cache_hits);
+    fprintf(stderr, "Cache misses:        %u\n", asn_cache_misses);
+    fprintf(stderr, "Hit rate:            %.2f%%\n", hit_rate);
+    fprintf(stderr, "Lookup successes:    %u\n", asn_lookup_success);
+    fprintf(stderr, "Lookup failures:     %u\n", asn_lookup_failures);
+    if (asn_cache != NULL) {
+        fprintf(stderr, "Cached entries:      %u\n", asn_cache->totalRecords);
+    }
+    fprintf(stderr, "============================\n\n");
 }

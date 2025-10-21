@@ -111,6 +111,14 @@ typedef unsigned char byte;
 typedef unsigned int word;
 typedef unsigned long dword;
 
+/* Coordinate mapping strategies for visualization */
+typedef enum {
+    MAPPING_HILBERT_IP,        /* Current: Direct IP with optional CIDR clustering (default) */
+    MAPPING_ASN,               /* Group by Autonomous System Number (network ownership) */
+    MAPPING_COUNTRY,           /* Group by geographic country of origin */
+    MAPPING_COUNTRY_ASN        /* Hybrid: Country regions subdivided by ASN */
+} MappingStrategy_t;
+
 /* prog config */
 
 typedef struct {
@@ -123,6 +131,7 @@ typedef struct {
   char *hostname;
   char *domainname;
   int debug;
+  int verbose;
   int greedy;
   int cluster;
   int clusterDepth;
@@ -141,13 +150,17 @@ typedef struct {
   const char *output_dir;      /* Output directory for visualization frames */
   uint32_t viz_width;          /* Visualization width in pixels */
   uint32_t viz_height;         /* Visualization height in pixels */
-  int generate_video;          /* Generate video from frames (default: 1) */
   uint32_t video_fps;          /* Video framerate (default: 3, auto-scaled) */
   const char *video_codec;     /* Video codec (default: libx264) */
   const char *cidr_map_file;   /* Path to CIDR mapping file (default: cidr_map.txt) */
   uint32_t target_video_duration; /* Target video length in seconds (default: 300 = 5 min) */
   int auto_scale;              /* Auto-scale FPS and decay based on data span (default: 1) */
   int show_timestamp;          /* Show timestamp overlay on frames (default: 0) */
+
+  /* Coordinate mapping strategy (v0.2.0+) */
+  MappingStrategy_t mapping_strategy; /* Visualization mapping mode (default: MAPPING_HILBERT_IP) */
+  const char *asn_db_path;     /* Path to MaxMind GeoLite2-ASN.mmdb (default: GeoLite2-ASN.mmdb) */
+  const char *country_db_path; /* Path to MaxMind GeoLite2-Country.mmdb (default: GeoLite2-Country.mmdb) */
 } Config_t;
 
 #endif	/* end of COMMON_H */

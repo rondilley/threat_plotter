@@ -87,6 +87,25 @@ typedef struct {
     uint32_t hit_count;         /* Number of cache hits */
 } GeoIPCacheEntry_t;
 
+/**
+ * ASN (Autonomous System Number) data
+ */
+typedef struct {
+    uint32_t asn;               /* AS Number (e.g., 15169 for Google) */
+    char asn_org[128];          /* Organization name (e.g., "GOOGLE") */
+    uint8_t valid;              /* Whether lookup succeeded */
+} ASNInfo_t;
+
+/**
+ * ASN cache entry
+ */
+typedef struct {
+    uint32_t ip;                /* IPv4 address (network byte order) */
+    ASNInfo_t asn_info;         /* Cached ASN data */
+    time_t cached_time;         /* When this entry was cached */
+    uint32_t hit_count;         /* Number of cache hits */
+} ASNCacheEntry_t;
+
 /****
  *
  * function prototypes
@@ -95,11 +114,15 @@ typedef struct {
 
 /* Initialization and cleanup */
 int initGeoIP(const char *db_path);
+int initASN(const char *db_path);
 void deInitGeoIP(void);
+void deInitASN(void);
 int isGeoIPAvailable(void);
+int isASNAvailable(void);
 
 /* IP lookup functions */
 GeoLocation_t *lookupGeoIP(uint32_t ipv4);
+ASNInfo_t *lookupASN(uint32_t ipv4);
 int getTimezoneOffset(uint32_t ipv4);
 const char *getTimezoneLabel(int offset);
 
@@ -109,7 +132,9 @@ int fallbackTimezoneFromIP(uint32_t ipv4);
 
 /* Cache management */
 void clearGeoIPCache(void);
+void clearASNCache(void);
 void printGeoIPCacheStats(void);
+void printASNCacheStats(void);
 
 /* Utility functions */
 int parseTimezoneOffset(const char *tz_name);

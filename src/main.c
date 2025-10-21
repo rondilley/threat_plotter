@@ -215,6 +215,9 @@ int main(int argc, char *argv[])
   /* store current pid */
   config->cur_pid = getpid();
 
+  /* set defaults */
+  config->verbose = 0;  /* Verbose output off by default */
+
   /* get real uid and gid in prep for priv drop */
   config->gid = getgid();
   config->uid = getuid();
@@ -224,13 +227,17 @@ int main(int argc, char *argv[])
   config->output_dir = NULL;
   config->viz_width = 4096;       /* Match Hilbert curve dimension (2^12) */
   config->viz_height = 4096;
-  config->generate_video = 1;     /* Generate video by default */
   config->video_fps = 3;          /* 3 FPS default (auto-scaled based on data span) */
   config->video_codec = "libx264"; /* H.264 codec default */
   config->cidr_map_file = NULL;   /* Will try default location */
   config->target_video_duration = 300;  /* 5 minutes default */
   config->auto_scale = 1;         /* Auto-scale FPS and decay by default */
   config->show_timestamp = 0;     /* Timestamp overlay off by default */
+
+  /* set mapping strategy defaults (v0.2.0+) */
+  config->mapping_strategy = MAPPING_HILBERT_IP;  /* Default: Hilbert/IP mapping (backward compatible) */
+  config->asn_db_path = "GeoLite2-ASN.mmdb";      /* Default ASN database location */
+  config->country_db_path = "GeoLite2-Country.mmdb"; /* Default Country database location */
 
   while (1)
   {
@@ -242,16 +249,19 @@ int main(int argc, char *argv[])
         {"help", no_argument, 0, 'h'},
         {"period", required_argument, 0, 'p'},
         {"output", required_argument, 0, 'o'},
-        {"no-video", no_argument, 0, 'V'},
+        {"verbose", no_argument, 0, 'V'},
         {"fps", required_argument, 0, 'f'},
         {"codec", required_argument, 0, 'c'},
         {"cidr-map", required_argument, 0, 'C'},
         {"duration", required_argument, 0, 'D'},
         {"timestamp", no_argument, 0, 't'},
+        {"mapping", required_argument, 0, 'M'},
+        {"asn-db", required_argument, 0, 'A'},
+        {"country-db", required_argument, 0, 'G'},
         {0, no_argument, 0, 0}};
-    c = getopt_long(argc, argv, "vd:hp:o:Vf:c:C:D:t", long_options, &option_index);
+    c = getopt_long(argc, argv, "vd:hp:o:Vf:c:C:D:tM:A:G:", long_options, &option_index);
 #else
-    c = getopt(argc, argv, "vd:hp:o:Vf:c:C:D:t");
+    c = getopt(argc, argv, "vd:hp:o:Vf:c:C:D:tM:A:G:");
 #endif
 
     if (c EQ - 1)
@@ -296,8 +306,8 @@ int main(int argc, char *argv[])
       break;
 
     case 'V':
-      /* disable video generation */
-      config->generate_video = 0;
+      /* enable verbose output */
+      config->verbose = 1;
       break;
 
     case 'f':
@@ -333,6 +343,40 @@ int main(int argc, char *argv[])
     case 't':
       /* enable timestamp overlay */
       config->show_timestamp = 1;
+      break;
+
+    case 'M':
+      /* set mapping strategy */
+      if (strcmp(optarg, "hilbert-ip") == 0) {
+        config->mapping_strategy = MAPPING_HILBERT_IP;
+      } else if (strcmp(optarg, "asn") == 0) {
+        config->mapping_strategy = MAPPING_ASN;
+      } else if (strcmp(optarg, "country") == 0) {
+        config->mapping_strategy = MAPPING_COUNTRY;
+      } else if (strcmp(optarg, "country-asn") == 0) {
+        config->mapping_strategy = MAPPING_COUNTRY_ASN;
+      } else {
+        fprintf(stderr, "ERR - Invalid mapping strategy: %s (valid: hilbert-ip, asn, country, country-asn)\n", optarg);
+        return (EXIT_FAILURE);
+      }
+      break;
+
+    case 'A':
+      /* set ASN database path */
+      if (!validate_file_path(optarg)) {
+        fprintf(stderr, "ERR - Invalid ASN database path: %s\n", optarg);
+        return (EXIT_FAILURE);
+      }
+      config->asn_db_path = optarg;
+      break;
+
+    case 'G':
+      /* set Country database path */
+      if (!validate_file_path(optarg)) {
+        fprintf(stderr, "ERR - Invalid Country database path: %s\n", optarg);
+        return (EXIT_FAILURE);
+      }
+      config->country_db_path = optarg;
       break;
 
     default:
@@ -376,13 +420,131 @@ int main(int argc, char *argv[])
    * get to work
    */
 
-  /* Initialize processing for all files */
-  if (initProcessing() != EXIT_SUCCESS) {
-    fprintf(stderr, "ERR - Failed to initialize processing\n");
+  /* Sort files chronologically by first timestamp before processing */
+  int file_count = argc - optind;
+
+  if (file_count > 0) {
+    /* Structure to hold file path and first timestamp */
+    typedef struct {
+      char *path;
+      time_t first_timestamp;
+    } FileTimestamp_t;
+
+    FileTimestamp_t *file_list = (FileTimestamp_t *)XMALLOC((size_t)file_count * sizeof(FileTimestamp_t));
+    if (!file_list) {
+      fprintf(stderr, "ERR - Cannot allocate memory for file list\n");
+      cleanup();
+      return (EXIT_FAILURE);
+    }
+
+    /* Peek first timestamp from each file */
+#ifdef DEBUG
+    if (config->debug >= 1) {
+      fprintf(stderr, "Detecting file timestamps for chronological sorting...\n");
+    }
+#endif
+
+    for (int i = 0; i < file_count; i++) {
+      file_list[i].path = argv[optind + i];
+      file_list[i].first_timestamp = peekFirstTimestamp(file_list[i].path);
+
+#ifdef DEBUG
+      if (config->debug >= 2 && file_list[i].first_timestamp > 0) {
+        char time_str[64];
+        struct tm *tm_info = localtime(&file_list[i].first_timestamp);
+        strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", tm_info);
+        fprintf(stderr, "  %s: %s\n", file_list[i].path, time_str);
+      }
+#endif
+
+      if (file_list[i].first_timestamp == 0) {
+        /* Assign maximum timestamp to sort unparseable files to end */
+        file_list[i].first_timestamp = (time_t)0x7FFFFFFF;
+      }
+    }
+
+    /* Sort files by timestamp (oldest first) using qsort */
+    int compare_timestamps(const void *a, const void *b) {
+      const FileTimestamp_t *fa = (const FileTimestamp_t *)a;
+      const FileTimestamp_t *fb = (const FileTimestamp_t *)b;
+      if (fa->first_timestamp < fb->first_timestamp) return -1;
+      if (fa->first_timestamp > fb->first_timestamp) return 1;
+      return 0;
+    }
+
+    qsort(file_list, (size_t)file_count, sizeof(FileTimestamp_t), compare_timestamps);
+
+#ifdef DEBUG
+    if (config->debug >= 1) {
+      fprintf(stderr, "\nProcessing files in chronological order:\n");
+      for (int i = 0; i < file_count; i++) {
+        if (file_list[i].first_timestamp != (time_t)0x7FFFFFFF) {
+          char time_str[64];
+          struct tm *tm_info = localtime(&file_list[i].first_timestamp);
+          strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", tm_info);
+          fprintf(stderr, "  %d. %s (%s)\n", i + 1, file_list[i].path, time_str);
+        } else {
+          fprintf(stderr, "  %d. %s (no timestamp)\n", i + 1, file_list[i].path);
+        }
+      }
+      fprintf(stderr, "\n");
+    }
+#endif
+
+    /* Initialize processing for all files */
+    if (initProcessing() != EXIT_SUCCESS) {
+      fprintf(stderr, "ERR - Failed to initialize processing\n");
+      XFREE(file_list);
+      cleanup();
+      return (EXIT_FAILURE);
+    }
+
+    /* Process files in sorted chronological order */
+    for (int i = 0; i < file_count; i++) {
+      /* Update current time in main loop (not in signal handler) */
+      if (time(&config->current_time) EQ - 1) {
+        display(LOG_ERR, "Unable to update current time");
+        XFREE(file_list);
+        finalizeProcessing();
+        cleanup();
+        return (EXIT_FAILURE);
+      }
+
+      if (!validate_file_path(file_list[i].path)) {
+        fprintf(stderr, "ERR - Invalid file path: %s\n", file_list[i].path);
+        XFREE(file_list);
+        finalizeProcessing();
+        cleanup();
+        return (EXIT_FAILURE);
+      }
+      if (processFileIntoTimeline(file_list[i].path) != EXIT_SUCCESS) {
+        fprintf(stderr, "ERR - Failed to process file\n");
+        XFREE(file_list);
+        finalizeProcessing();
+        cleanup();
+        return (EXIT_FAILURE);
+      }
+    }
+
+    /* Free file list */
+    XFREE(file_list);
+
+    /* Finalize processing and generate video */
+    if (finalizeProcessing() != EXIT_SUCCESS) {
+      fprintf(stderr, "ERR - Failed to finalize processing\n");
+      cleanup();
+      return (EXIT_FAILURE);
+    }
+  } else {
+    /* No files provided - this should be caught earlier, but handle gracefully */
+    fprintf(stderr, "ERR - No input files specified\n");
+    print_help();
     cleanup();
     return (EXIT_FAILURE);
   }
 
+  /* Old file processing loop - now replaced by sorted chronological processing above */
+  #if 0
   /* Process all the files into a single timeline */
   while (optind < argc)
   {
@@ -414,6 +576,7 @@ int main(int argc, char *argv[])
     cleanup();
     return (EXIT_FAILURE);
   }
+  #endif /* Old unsorted file processing code */
 
   /*
    * finished with the work
@@ -496,6 +659,8 @@ PRIVATE void print_help(void)
   fprintf(stderr, "syntax: %s [options] filename [filename ...]\n", PACKAGE);
 
 #ifdef HAVE_GETOPT_LONG
+  fprintf(stderr, " -A|--asn-db FILE       MaxMind ASN database (default: GeoLite2-ASN.mmdb)\n");
+  fprintf(stderr, "                        required for --mapping asn or country-asn\n");
   fprintf(stderr, " -c|--codec CODEC       video codec (default: libx264)\n");
   fprintf(stderr, "                        examples: libx264, libx265, libvpx-vp9\n");
   fprintf(stderr, " -C|--cidr-map FILE     CIDR mapping file (default: cidr_map.txt)\n");
@@ -504,26 +669,36 @@ PRIVATE void print_help(void)
   fprintf(stderr, "                        FPS and decay auto-scale based on data span\n");
   fprintf(stderr, " -f|--fps FPS           video framerate (default: auto-scaled)\n");
   fprintf(stderr, "                        baseline: 1 day = 3 FPS, scales linearly\n");
+  fprintf(stderr, " -G|--country-db FILE   MaxMind Country database (default: GeoLite2-Country.mmdb)\n");
+  fprintf(stderr, "                        required for --mapping country or country-asn\n");
   fprintf(stderr, " -h|--help              this info\n");
+  fprintf(stderr, " -M|--mapping STRATEGY  coordinate mapping strategy (default: hilbert-ip)\n");
+  fprintf(stderr, "                        hilbert-ip: Direct IP with optional CIDR clustering\n");
+  fprintf(stderr, "                        asn: Group by network ownership (AS number)\n");
+  fprintf(stderr, "                        country: Group by geographic country\n");
+  fprintf(stderr, "                        country-asn: Hybrid country+ASN grouping\n");
   fprintf(stderr, " -o|--output DIR        output directory for frames/video (default: plots)\n");
   fprintf(stderr, " -p|--period DURATION   time bin period (default: 1m)\n");
   fprintf(stderr, "                        examples: 1m, 5m, 15m, 30m, 60m, 120s, 1h\n");
   fprintf(stderr, " -t|--timestamp         show timestamp overlay on frames\n");
   fprintf(stderr, " -v|--version           display version information\n");
-  fprintf(stderr, " -V|--no-video          don't generate video (keep frames only)\n");
+  fprintf(stderr, " -V|--verbose           show verbose output (file sorting, parser stats)\n");
   fprintf(stderr, " filename               one or more files to process\n");
 #else
+  fprintf(stderr, " -A {file}     MaxMind ASN database (default: GeoLite2-ASN.mmdb)\n");
   fprintf(stderr, " -c {codec}    video codec (default: libx264)\n");
   fprintf(stderr, " -C {file}     CIDR mapping file (default: cidr_map.txt)\n");
   fprintf(stderr, " -d {lvl}      enable debugging info\n");
   fprintf(stderr, " -D {secs}     target video duration (default: 300)\n");
   fprintf(stderr, " -f {fps}      video framerate (default: auto-scaled)\n");
+  fprintf(stderr, " -G {file}     MaxMind Country database (default: GeoLite2-Country.mmdb)\n");
   fprintf(stderr, " -h            this info\n");
+  fprintf(stderr, " -M {strategy} mapping strategy (hilbert-ip, asn, country, country-asn)\n");
   fprintf(stderr, " -o {dir}      output directory for frames/video (default: plots)\n");
   fprintf(stderr, " -p {period}   time bin period (default: 1m)\n");
   fprintf(stderr, " -t            show timestamp overlay on frames\n");
   fprintf(stderr, " -v            display version information\n");
-  fprintf(stderr, " -V            don't generate video (keep frames only)\n");
+  fprintf(stderr, " -V            show verbose output (file sorting, parser stats)\n");
   fprintf(stderr, " filename      one or more files to process\n");
 #endif
 

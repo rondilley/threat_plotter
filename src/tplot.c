@@ -534,8 +534,8 @@ int processHoneypotFile(const char *fName)
   fprintf(stderr, "Average events per frame: %.1f\n",
           (float)callback_data.event_count / (float)callback_data.bin_manager->bins_written);
 
-  /* Generate video if requested */
-  if (config->generate_video && callback_data.bin_manager->bins_written > 0) {
+  /* Generate video */
+  if (callback_data.bin_manager->bins_written > 0) {
     char video_path[PATH_MAX];
     int ret;
 
@@ -810,8 +810,8 @@ int finalizeProcessing(void)
             (float)g_callback_data.event_count / (float)g_bin_manager->bins_written);
   }
 
-  /* Generate video if requested */
-  if (config->generate_video && g_bin_manager->bins_written > 0) {
+  /* Generate video */
+  if (g_bin_manager->bins_written > 0) {
     char video_path[PATH_MAX];
     int ret;
 

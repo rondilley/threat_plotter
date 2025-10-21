@@ -162,4 +162,7 @@ int processGzipFile(const char *file_path,
                     int (*event_callback)(const HoneypotEvent_t *event, void *user_data),
                     void *user_data);
 
+/* File timestamp detection for chronological sorting */
+time_t peekFirstTimestamp(const char *file_path);
+
 #endif /* LOG_PARSER_DOT_H */

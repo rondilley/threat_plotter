@@ -748,3 +748,133 @@ int processGzipFile(const char *file_path,
 
     return result;
 }
+
+/****
+ *
+ * Extract timestamp from FortiGate log line (basic parsing for sorting only)
+ *
+ * DESCRIPTION:
+ *   Parses FortiGate format: date=YYYY-MM-DD time=HH:MM:SS
+ *   This is a simplified parser just for timestamp extraction.
+ *
+ * PARAMETERS:
+ *   line - Log line to parse
+ *
+ * RETURNS:
+ *   Unix timestamp, or 0 if parsing fails
+ *
+ ****/
+PRIVATE time_t parseFortiGateTimestamp(const char *line)
+{
+    const char *date_ptr, *time_ptr;
+    struct tm tm_info;
+    int year, month, day, hour, minute, second;
+
+    if (!line) {
+        return 0;
+    }
+
+    /* Look for date=YYYY-MM-DD pattern */
+    date_ptr = strstr(line, "date=");
+    if (!date_ptr) {
+        return 0;
+    }
+    date_ptr += 5;  /* Skip "date=" */
+
+    /* Parse date: YYYY-MM-DD */
+    if (sscanf(date_ptr, "%4d-%2d-%2d", &year, &month, &day) != 3) {
+        return 0;
+    }
+
+    /* Look for time=HH:MM:SS pattern */
+    time_ptr = strstr(line, "time=");
+    if (!time_ptr) {
+        return 0;
+    }
+    time_ptr += 5;  /* Skip "time=" */
+
+    /* Parse time: HH:MM:SS */
+    if (sscanf(time_ptr, "%2d:%2d:%2d", &hour, &minute, &second) != 3) {
+        return 0;
+    }
+
+    /* Build struct tm */
+    memset(&tm_info, 0, sizeof(tm_info));
+    tm_info.tm_year = year - 1900;
+    tm_info.tm_mon = month - 1;
+    tm_info.tm_mday = day;
+    tm_info.tm_hour = hour;
+    tm_info.tm_min = minute;
+    tm_info.tm_sec = second;
+    tm_info.tm_isdst = -1;  /* Let mktime determine DST */
+
+    return mktime(&tm_info);
+}
+
+/****
+ *
+ * Peek at first parseable timestamp in log file
+ *
+ * DESCRIPTION:
+ *   Opens log file, reads lines until first parseable event is found,
+ *   extracts timestamp, and closes file. Used for chronological file sorting.
+ *   Supports both honeypot sensor format and FortiGate format.
+ *
+ * PARAMETERS:
+ *   file_path - Path to gzip or plain text log file
+ *
+ * RETURNS:
+ *   Unix timestamp of first parseable event, or 0 if no events found
+ *
+ * SIDE EFFECTS:
+ *   Opens and closes file
+ *
+ ****/
+time_t peekFirstTimestamp(const char *file_path)
+{
+    GzipStream_t *stream = NULL;
+    char line[LOG_PARSER_MAX_LINE];
+    HoneypotEvent_t event;
+    time_t first_timestamp = 0;
+    int max_lines_to_check = 1000;  /* Don't scan forever if file is corrupt */
+    int lines_checked = 0;
+
+    if (!file_path) {
+        return 0;
+    }
+
+    /* Open gzip stream */
+    stream = openGzipStream(file_path);
+    if (!stream) {
+        fprintf(stderr, "WARN - Cannot peek timestamp from %s: failed to open\n", file_path);
+        return 0;
+    }
+
+    /* Read lines until we find a parseable event */
+    while (readLineGzip(stream, line, sizeof(line)) && lines_checked < max_lines_to_check) {
+        lines_checked++;
+
+        /* Try to parse as honeypot sensor log */
+        if (parseHoneypotLine(line, &event)) {
+            first_timestamp = event.timestamp;
+            break;
+        }
+
+        /* Try to parse as FortiGate log (basic timestamp extraction) */
+        first_timestamp = parseFortiGateTimestamp(line);
+        if (first_timestamp > 0) {
+            break;
+        }
+    }
+
+    /* Cleanup */
+    closeGzipStream(stream);
+
+    /* Only warn if no timestamp found (this is rare and indicates an issue) */
+    if (first_timestamp == 0) {
+        fprintf(stderr, "WARN - No parseable timestamp found in %s (checked %d lines)\n",
+                file_path, lines_checked);
+    }
+
+    return first_timestamp;
+}

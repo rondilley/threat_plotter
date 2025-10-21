@@ -2,6 +2,10 @@
  *
  * Description: Hilbert Curve Engine Implementation
  *
+ * Attribution: The concept of using Hilbert curves to map the Internet
+ *              in a visual field was originally proposed by Trent Hampton
+ *              (https://www.linkedin.com/in/trent-hampton-65870345/)
+ *
  * Copyright (c) 2025, Ron Dilley
  * All rights reserved.
  *
