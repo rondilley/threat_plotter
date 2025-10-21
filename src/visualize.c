@@ -412,12 +412,13 @@ RGB_t intensityToColor(uint32_t intensity, uint32_t max_intensity)
  *   bin - TimeBin_t with heatmap data
  *   width - Output width in pixels
  *   height - Output height in pixels
- *   residue_map - Persistent attack memory bitmap (may be NULL)
+ *   residue_map - Persistent attack memory volume map (may be NULL)
+ *   residue_max_volume - Maximum residue volume for threshold calculation
  *
  * RETURNS:
  *   TRUE on success, FALSE on error
  ****/
-int writePPM(const char *filename, const TimeBin_t *bin, uint32_t width, uint32_t height, const uint8_t *residue_map)
+int writePPM(const char *filename, const TimeBin_t *bin, uint32_t width, uint32_t height, const uint32_t *residue_map, uint32_t residue_max_volume)
 {
     FILE *fp;
     uint32_t x, y, src_x, src_y;
@@ -428,6 +429,9 @@ int writePPM(const char *filename, const TimeBin_t *bin, uint32_t width, uint32_
     uint8_t *image_buffer = NULL;
     uint32_t actual_height = height;
     uint32_t image_buffer_size;
+
+    /* Suppress unused parameter warning - kept in signature for API consistency */
+    (void)residue_max_volume;
 
     if (!filename || !bin || !bin->heatmap) {
         return FALSE;
@@ -537,12 +541,32 @@ int writePPM(const char *filename, const TimeBin_t *bin, uint32_t width, uint32_
                     intensity = bin->heatmap[idx];
                     int residue_shown = FALSE;
 
-                    /* Check residue map first - show grey for historical attacks with no current activity */
-                    if (residue_map && residue_map[idx] && intensity == 0) {
-                        /* Dark grey residue - persistent attack memory (15% darker than before) */
-                        color.r = 54;
-                        color.g = 54;
-                        color.b = 54;
+                    /* Check residue map first - show volume-based colors for historical attacks with no current activity */
+                    if (residue_map && residue_map[idx] > 0 && intensity == 0) {
+                        uint32_t residue_volume = residue_map[idx];
+
+                        /* Classify residue volume into minimal/average/heavy using absolute thresholds
+                         * - Minimal (1-10 attacks): dark gray RGB(54, 54, 54)
+                         * - Average (11-100 attacks): dark yellow RGB(90, 90, 0)
+                         * - Heavy (100+ attacks): dark red RGB(90, 0, 0)
+                         */
+                        if (residue_volume <= 10) {
+                            /* Minimal volume - dark gray */
+                            color.r = 54;
+                            color.g = 54;
+                            color.b = 54;
+                        } else if (residue_volume <= 100) {
+                            /* Average volume - dark yellow (brighter for visibility) */
+                            color.r = 90;
+                            color.g = 90;
+                            color.b = 0;
+                        } else {
+                            /* Heavy volume - dark red (brighter for visibility) */
+                            color.r = 90;
+                            color.g = 0;
+                            color.b = 0;
+                        }
+
                         residue_shown = TRUE;
                     } else {
                         /* Normal heatmap color gradient */
@@ -654,11 +678,11 @@ int generateBinFilename(char *buf, size_t buf_size, const char *dir,
  * RETURNS:
  *   TRUE on success, FALSE on error
  ****/
-int renderTimeBin(const TimeBin_t *bin, const char *output_path, uint32_t width, uint32_t height, const uint8_t *residue_map)
+int renderTimeBin(const TimeBin_t *bin, const char *output_path, uint32_t width, uint32_t height, const uint32_t *residue_map, uint32_t residue_max_volume)
 {
     if (!bin || !output_path) {
         return FALSE;
     }
 
-    return writePPM(output_path, bin, width, height, residue_map);
+    return writePPM(output_path, bin, width, height, residue_map, residue_max_volume);
 }

@@ -107,10 +107,10 @@ void deInitVisualization(void);
 RGB_t intensityToColor(uint32_t intensity, uint32_t max_intensity);
 
 /* PPM output */
-int writePPM(const char *filename, const TimeBin_t *bin, uint32_t width, uint32_t height, const uint8_t *residue_map);
+int writePPM(const char *filename, const TimeBin_t *bin, uint32_t width, uint32_t height, const uint32_t *residue_map, uint32_t residue_max_volume);
 
 /* Render time bin to image file */
-int renderTimeBin(const TimeBin_t *bin, const char *output_path, uint32_t width, uint32_t height, const uint8_t *residue_map);
+int renderTimeBin(const TimeBin_t *bin, const char *output_path, uint32_t width, uint32_t height, const uint32_t *residue_map, uint32_t residue_max_volume);
 
 /* Generate filename for bin */
 int generateBinFilename(char *buf, size_t buf_size, const char *dir,

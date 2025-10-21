@@ -119,8 +119,9 @@ typedef struct {
     uint32_t cache_capacity;          /* Maximum cache capacity */
 
     /* Residue map - persistent attack memory across all time bins */
-    uint8_t *residue_map;             /* 2D bitmap: residue_map[y * dimension + x] */
+    uint32_t *residue_map;            /* 2D volume map: residue_map[y * dimension + x] = cumulative event count */
     uint32_t residue_count;           /* Number of coordinates marked in residue map */
+    uint32_t residue_max_volume;      /* Maximum cumulative volume across all coordinates */
 } TimeBinManager_t;
 
 /****
@@ -157,6 +158,6 @@ void cleanExpiredCacheEntries(TimeBinManager_t *manager, time_t current_time);
 
 /* Residue map operations - persistent attack memory */
 void markResidue(TimeBinManager_t *manager, uint32_t x, uint32_t y);
-uint8_t getResidue(TimeBinManager_t *manager, uint32_t x, uint32_t y);
+uint32_t getResidue(TimeBinManager_t *manager, uint32_t x, uint32_t y);
 
 #endif /* TIMEBIN_DOT_H */

@@ -363,7 +363,8 @@ PRIVATE int honeypotEventCallback(const HoneypotEvent_t *event, void *user_data)
     if (renderTimeBin(old_bin, output_path,
                       data->viz_config->width,
                       data->viz_config->height,
-                      data->bin_manager->residue_map)) {
+                      data->bin_manager->residue_map,
+                      data->bin_manager->residue_max_volume)) {
       data->bin_manager->bins_written++;
 #ifdef DEBUG
       if (config->debug >= 1) {
@@ -508,7 +509,8 @@ int processHoneypotFile(const char *fName)
 
     if (renderTimeBin(callback_data.bin_manager->current_bin, output_path,
                       viz_config.width, viz_config.height,
-                      callback_data.bin_manager->residue_map)) {
+                      callback_data.bin_manager->residue_map,
+                      callback_data.bin_manager->residue_max_volume)) {
       callback_data.bin_manager->bins_written++;
 #ifdef DEBUG
       if (config->debug >= 1) {
@@ -781,7 +783,8 @@ int finalizeProcessing(void)
 
     if (renderTimeBin(g_bin_manager->current_bin, output_path,
                       g_viz_config.width, g_viz_config.height,
-                      g_bin_manager->residue_map)) {
+                      g_bin_manager->residue_map,
+                      g_bin_manager->residue_max_volume)) {
       g_bin_manager->bins_written++;
 #ifdef DEBUG
       if (config->debug >= 1) {

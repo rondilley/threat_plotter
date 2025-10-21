@@ -630,9 +630,9 @@ TimeBinManager_t *createTimeBinManager(TimeBinConfig_t *config_in)
     memset(manager->decay_cache, 0,
            sizeof(DecayCacheEntry_t) * manager->cache_capacity);
 
-    /* Initialize residue map - persistent attack memory */
-    uint32_t residue_map_size = manager->config.dimension * manager->config.dimension;
-    manager->residue_map = (uint8_t *)XMALLOC((int)residue_map_size);
+    /* Initialize residue map - persistent attack memory (cumulative volume tracking) */
+    uint32_t residue_map_size = manager->config.dimension * manager->config.dimension * sizeof(uint32_t);
+    manager->residue_map = (uint32_t *)XMALLOC((int)residue_map_size);
 
     if (!manager->residue_map) {
         XFREE(manager->decay_cache);
@@ -642,6 +642,7 @@ TimeBinManager_t *createTimeBinManager(TimeBinConfig_t *config_in)
 
     memset(manager->residue_map, 0, residue_map_size);
     manager->residue_count = 0;
+    manager->residue_max_volume = 0;
 
 #ifdef DEBUG
     if (config->debug >= 1) {
@@ -1092,12 +1093,12 @@ void cleanExpiredCacheEntries(TimeBinManager_t *manager, time_t current_time)
 
 /****
  *
- * Mark coordinate in residue map
+ * Mark coordinate in residue map with cumulative volume tracking
  *
  * DESCRIPTION:
- *   Permanently marks a coordinate in the residue map as having been attacked.
- *   This creates a persistent visual "memory" that shows which IP positions
- *   have historically been sources of attacks across all time bins.
+ *   Increments cumulative attack volume for a coordinate in the residue map.
+ *   Tracks total attack count across all time bins to enable volume-based
+ *   visualization (minimal/average/heavy attacker coloring).
  *
  * PARAMETERS:
  *   manager - Pointer to TimeBinManager_t with residue map
@@ -1108,8 +1109,9 @@ void cleanExpiredCacheEntries(TimeBinManager_t *manager, time_t current_time)
  *   void
  *
  * SIDE EFFECTS:
- *   Sets residue_map[y * dimension + x] = 1 if not already set
- *   Increments residue_count if this is a new marked coordinate
+ *   Increments residue_map[y * dimension + x]
+ *   Increments residue_count if this is first attack from this coordinate
+ *   Updates residue_max_volume if new maximum reached
  *
  ****/
 void markResidue(TimeBinManager_t *manager, uint32_t x, uint32_t y)
@@ -1128,26 +1130,32 @@ void markResidue(TimeBinManager_t *manager, uint32_t x, uint32_t y)
     /* Calculate index into residue map */
     idx = y * manager->config.dimension + x;
 
-    /* Mark this coordinate if not already marked */
+    /* Increment cumulative volume for this coordinate */
     if (manager->residue_map[idx] == 0) {
-        manager->residue_map[idx] = 1;
-        manager->residue_count++;
+        manager->residue_count++;  /* First attack from this coordinate */
+    }
+
+    manager->residue_map[idx]++;
+
+    /* Track maximum volume across all coordinates */
+    if (manager->residue_map[idx] > manager->residue_max_volume) {
+        manager->residue_max_volume = manager->residue_map[idx];
+    }
 
 #ifdef DEBUG
-        if (config->debug >= 5) {
-            fprintf(stderr, "DEBUG - Marked residue at (%u,%u), total residue coords: %u\n",
-                    x, y, manager->residue_count);
-        }
-#endif
+    if (config->debug >= 5) {
+        fprintf(stderr, "DEBUG - Residue at (%u,%u): volume=%u, max_volume=%u, unique_coords=%u\n",
+                x, y, manager->residue_map[idx], manager->residue_max_volume, manager->residue_count);
     }
+#endif
 }
 
 /****
  *
- * Get residue status for coordinate
+ * Get residue volume for coordinate
  *
  * DESCRIPTION:
- *   Checks if a coordinate has been marked in the residue map.
+ *   Returns cumulative attack volume for a coordinate from the residue map.
  *
  * PARAMETERS:
  *   manager - Pointer to TimeBinManager_t with residue map
@@ -1155,11 +1163,10 @@ void markResidue(TimeBinManager_t *manager, uint32_t x, uint32_t y)
  *   y - Y coordinate to check
  *
  * RETURNS:
- *   1 if coordinate is marked in residue map
- *   0 if not marked or out of bounds
+ *   Cumulative attack count for this coordinate (0 = never attacked)
  *
  ****/
-uint8_t getResidue(TimeBinManager_t *manager, uint32_t x, uint32_t y)
+uint32_t getResidue(TimeBinManager_t *manager, uint32_t x, uint32_t y)
 {
     uint32_t idx;
 
@@ -1172,7 +1179,7 @@ uint8_t getResidue(TimeBinManager_t *manager, uint32_t x, uint32_t y)
         return 0;
     }
 
-    /* Calculate index and return residue status */
+    /* Calculate index and return residue volume */
     idx = y * manager->config.dimension + x;
     return manager->residue_map[idx];
 }
